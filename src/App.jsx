@@ -396,59 +396,15 @@ function App() {
   if (!session.loggedIn) {
     return (
       <div className="login-shell">
-        <div className="login-hero-panel">
-          <div className="hero-visual" aria-hidden="true">
-            <div className="hero-glow hero-glow-one" />
-            <div className="hero-glow hero-glow-two" />
-            <div className="hero-grid" />
-            <div className="hero-metric hero-metric-top">
-              <span className="metric-label">Expected</span>
-              <strong>₹48,500</strong>
-            </div>
-            <div className="hero-metric hero-metric-bottom">
-              <span className="metric-label">Outstanding</span>
-              <strong>₹9,500</strong>
-            </div>
-          </div>
-
-          <div className="hero-copy">
-            <p className="eyebrow neutral">Consultant revenue intelligence</p>
-            <h1>Know what you should earn, what you received, and what still needs follow-up.</h1>
-          </div>
-        </div>
-
         <div className="login-card">
-          <div className="login-mark">☼</div>
-          <h2>Get Started</h2>
-          <p className="login-subtitle">Welcome to Revenue Ledger — Let’s get started</p>
-
+          <div className="login-header"><p className="eyebrow neutral">Secure access</p><h1>Doctor Revenue Tracking</h1></div>
           <form className="login-form" onSubmit={handleLogin}>
-            <label className="field">
-              <span className="field-label">Your email</span>
-              <input
-                type="text"
-                value={loginForm.username}
-                onChange={(event) => setLoginForm({ ...loginForm, username: event.target.value })}
-                placeholder="doctor@revenue.com"
-              />
-            </label>
-            <label className="field">
-              <span className="field-label">Create new password</span>
-              <input
-                type="password"
-                value={loginForm.password}
-                onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })}
-                placeholder="Enter password"
-              />
-            </label>
+            <label className="field"><span className="field-label">Username</span><input type="text" value={loginForm.username} onChange={(event) => setLoginForm({ ...loginForm, username: event.target.value })} placeholder="Enter username" /></label>
+            <label className="field"><span className="field-label">Password</span><input type="password" value={loginForm.password} onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })} placeholder="Enter password" /></label>
             {loginError && <div className="login-error">{loginError}</div>}
-            <button type="submit" className="primary-btn full-width-btn">Create a new account</button>
+            <button type="submit" className="primary-btn full-width-btn">Login</button>
           </form>
-
-          <div className="login-note">
-            <span>Already have account? <button type="button" className="inline-link" onClick={() => setLoginForm({ username: 'doctor2026', password: 'doc@123' })}>Login</button></span>
-            <div className="demo-box"><strong>Demo accounts</strong><p>Doctor: doctor2026 / doc@123</p><p>Admin: admin2026 / admin@123</p></div>
-          </div>
+          <div className="login-note"><strong>Demo accounts</strong><p>Doctor: doctor2026 / doc@123</p><p>Admin: admin2026 / admin@123</p></div>
         </div>
       </div>
     )
