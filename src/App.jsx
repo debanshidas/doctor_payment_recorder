@@ -407,61 +407,90 @@ function App() {
   }
 
   const renderDashboard = () => (
-    <>
-      <div className="page-header">
+    <section className="space-y-6 animate-fade-in">
+      <header className="flex items-end justify-between">
         <div>
-          <p className="eyebrow">Overview</p>
-          <h1>{session.role === 'admin' ? 'Admin Dashboard' : 'My Dashboard'}</h1>
+          <p className="text-sm text-neutral-500">Revenue overview</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">
+            Good morning{session.user ? `, ${session.user.name.split(' ')[0]}` : ''}
+          </h1>
         </div>
-      </div>
+        {session.role === 'doctor' && (
+          <button className="primary-btn" onClick={() => { setActivePage('My Records'); setViewState('form') }}>
+            + Start New Record
+          </button>
+        )}
+      </header>
 
-      <div className="metrics-bar">
-        <div className="metric-item">
-          <span className="metric-label">Total Expected</span>
-          <strong className="metric-value neutral">{formatMoney(totalExpected)}</strong>
+      <div className="grid gap-4 lg-grid-cols-12 mt-6">
+        <div className="card lg-col-7 bg-white p-6">
+          <p className="text-sm text-neutral-500">Total expected revenue</p>
+          <p className="mt-3 text-4xl font-semibold tracking-tight">
+            {formatMoney(totalExpected)}
+          </p>
+          <p className="mt-2 text-sm text-neutral-500">
+            Across {hospitals.length} active hospitals
+          </p>
         </div>
-        <div className="metric-item">
-          <span className="metric-label">Received</span>
-          <strong className="metric-value success">{formatMoney(totalReceived)}</strong>
-        </div>
-        <div className="metric-item">
-          <span className="metric-label">Outstanding</span>
-          <strong className="metric-value warning">{formatMoney(totalOutstanding)}</strong>
-        </div>
-        <div className="metric-item">
-          <span className="metric-label">Deductions</span>
-          <strong className="metric-value danger">{formatMoney(totalDiscrepancy)}</strong>
-        </div>
-      </div>
 
-      <div className="two-col-layout">
-        <div className="panel">
-          <div className="panel-header"><h3>Hospital-wise summary</h3></div>
+        <div className="card lg-col-5 bg-white p-6">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-sm text-neutral-500">Outstanding revenue</p>
+              <p className="mt-3 text-3xl font-semibold tracking-tight text-warning">
+                {formatMoney(totalOutstanding)}
+              </p>
+              <p className="mt-2 text-sm text-neutral-500">
+                Requires follow-up
+              </p>
+            </div>
+            <span className="text-neutral-400">↗</span>
+          </div>
+          <button className="mt-6 text-sm font-medium text-orange-600 hover-text-orange-700" onClick={() => setActivePage('My Payments')}>
+            View payments →
+          </button>
+        </div>
+
+        <div className="card lg-col-8 bg-white p-6">
+          <h3 className="text-sm font-medium mb-4">Recent Services</h3>
           <div className="table-wrap">
-            <table>
-              <thead><tr><th>Hospital</th><th>Expected</th><th>Received</th><th>Outstanding</th></tr></thead>
+            <table className="clean-table">
+              <thead>
+                <tr><th>Hospital</th><th>Date</th><th>Service</th><th>Expected</th></tr>
+              </thead>
               <tbody>
-                {hospitalSummary.map((hospital) => (
-                  <tr key={hospital.id}><td>{hospital.name}</td><td>{formatMoney(hospital.expected)}</td><td>{formatMoney(hospital.received)}</td><td>{formatMoney(hospital.outstanding)}</td></tr>
+                {records.slice(0, 4).map((record) => (
+                  <tr key={record.id}>
+                    <td>{record.hospital}</td>
+                    <td>{record.date}</td>
+                    <td>{record.service}</td>
+                    <td>{formatMoney(record.expectedAmount)}</td>
+                  </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </div>
 
-        <div className="panel">
-          <div className="panel-header"><h3>Follow-up list</h3></div>
-          <ul className="attention-list">
-            {followUpList.map((item) => (
-              <li key={item.label} className={`tone-${item.tone}`}>
-                <strong>{item.label}</strong>
-                <span>{item.value}</span>
-              </li>
-            ))}
-          </ul>
+        <div className="card lg-col-4 bg-white p-6">
+          <h3 className="text-sm font-medium mb-4">At a Glance</h3>
+          <div className="flex flex-col gap-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <span className="text-sm text-neutral-500">Total Received</span>
+              <strong className="text-success">{formatMoney(totalReceived)}</strong>
+            </div>
+            <div className="flex justify-between items-center border-b pb-3">
+              <span className="text-sm text-neutral-500">Deductions</span>
+              <strong className="text-danger">{formatMoney(totalDiscrepancy)}</strong>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-neutral-500">Active Cases</span>
+              <strong>{records.length}</strong>
+            </div>
+          </div>
         </div>
       </div>
-    </>
+    </section>
   )
 
   const renderHospitals = () => {
@@ -564,16 +593,25 @@ function App() {
   }
 
   const renderPayments = () => (
-    <>
-      <div className="page-header">
-        <div><p className="eyebrow">Payments</p><h1>My Payments / Active Cases</h1></div>
-        {session.role === 'doctor' && <button className="primary-btn" onClick={() => { setActivePage('My Records'); setViewState('form') }}>+ Start New Record</button>}
+    <section className="animate-fade-in">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">My Payments</h1>
+          <p className="text-sm text-neutral-500 mt-1">Track received and outstanding payments</p>
+        </div>
+        {session.role === 'doctor' && (
+          <button className="primary-btn" onClick={() => { setActivePage('My Records'); setViewState('form') }}>
+            + Start New Record
+          </button>
+        )}
       </div>
       
-      <div className="panel">
-        <div className="panel-header"><h3>Active Cases</h3></div>
+      <div className="card bg-white">
+        <div className="p-4 border-b">
+          <h3 className="text-sm font-medium">Active Cases</h3>
+        </div>
         <div className="table-wrap">
-          <table>
+          <table className="clean-table">
             <thead>
               <tr>
                 <th>Hospital</th>
@@ -614,10 +652,12 @@ function App() {
         </div>
       </div>
 
-      <div className="panel" style={{ marginTop: '24px' }}>
-        <div className="panel-header"><h3>Ledger (Auto-Synced)</h3></div>
+      <div className="card bg-white" style={{ marginTop: '24px' }}>
+        <div className="p-4 border-b">
+          <h3 className="text-sm font-medium">Ledger (Auto-Synced)</h3>
+        </div>
         <div className="table-wrap">
-          <table>
+          <table className="clean-table">
             <thead>
               <tr>
                 <th>Hospital</th>
@@ -644,7 +684,7 @@ function App() {
         <button type="button" className="secondary-btn" onClick={() => setActivePage('Dashboard')}>← Back to Dashboard</button>
         <button type="button" className="primary-btn" onClick={() => setActivePage('Discrepancies')}>Next: Reconciliation →</button>
       </div>
-    </>
+    </section>
   )
 
   const renderDiscrepancies = () => (

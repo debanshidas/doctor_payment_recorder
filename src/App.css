@@ -833,3 +833,92 @@ th {
   }
 }
 
+/* Tailwind-like Utilities */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.items-start { align-items: flex-start; }
+.items-end { align-items: flex-end; }
+.justify-between { justify-content: space-between; }
+.justify-end { justify-content: flex-end; }
+.gap-4 { gap: 1rem; }
+.space-y-6 > * + * { margin-top: 1.5rem; }
+
+.grid { display: grid; }
+.lg-grid-cols-12 { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+.lg-col-7 { grid-column: span 7 / span 7; }
+.lg-col-5 { grid-column: span 5 / span 5; }
+.lg-col-8 { grid-column: span 8 / span 8; }
+.lg-col-4 { grid-column: span 4 / span 4; }
+
+.mt-1 { margin-top: 0.25rem; }
+.mt-2 { margin-top: 0.5rem; }
+.mt-3 { margin-top: 0.75rem; }
+.mt-4 { margin-top: 1rem; }
+.mt-6 { margin-top: 1.5rem; }
+.mb-4 { margin-bottom: 1rem; }
+.mb-6 { margin-bottom: 1.5rem; }
+.pb-3 { padding-bottom: 0.75rem; }
+.p-6 { padding: 1.5rem; }
+.p-4 { padding: 1rem; }
+
+.text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+.text-2xl { font-size: 1.5rem; line-height: 2rem; }
+.text-3xl { font-size: 1.875rem; line-height: 2.25rem; }
+.text-4xl { font-size: 2.25rem; line-height: 2.5rem; }
+
+.font-medium { font-weight: 500; }
+.font-semibold { font-weight: 600; }
+.tracking-tight { letter-spacing: -0.025em; }
+
+.text-neutral-500 { color: var(--muted); }
+.text-neutral-400 { color: #9ca3af; }
+.text-warning { color: var(--warning); }
+.text-success { color: var(--success); }
+.text-danger { color: var(--danger); }
+.text-orange-600 { color: #ea580c; }
+.hover-text-orange-700:hover { color: #c2410c; }
+
+.bg-white { background-color: var(--surface); }
+.bg-neutral-50 { background-color: #f9fafb; }
+
+.border-b { border-bottom: 1px solid var(--border); }
+
+.card {
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 3px 0 rgba(0,0,0,0.05), 0 1px 2px 0 rgba(0,0,0,0.03);
+  transition: border-color 0.2s ease;
+}
+.card:hover { border-color: #d1d5db; }
+
+.clean-table th, .clean-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 12px 16px;
+  font-size: 0.875rem;
+}
+.clean-table thead tr {
+  background-color: #fafafa;
+}
+.clean-table th {
+  color: var(--muted);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.clean-table tbody tr:hover {
+  background-color: #fafafa;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fadeIn 0.35s ease-out forwards;
+}
+
+@media (max-width: 1024px) {
+  .lg-grid-cols-12 { grid-template-columns: 1fr; }
+  .lg-col-7, .lg-col-5, .lg-col-8, .lg-col-4 { grid-column: span 1 / span 1; }
+}
