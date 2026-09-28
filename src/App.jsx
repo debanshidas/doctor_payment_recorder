@@ -155,14 +155,23 @@ function AbstractRevenueVisual() {
 }
 
 function App() {
+  const [users, setUsers] = useState([
+    { username: 'admin2026', email: 'admin@example.com', password: 'admin@123', name: 'Admin User', role: 'admin' },
+    { username: 'doctor2026', email: 'doc@example.com', password: 'doc@123', name: 'Dr. Aisha Nair', role: 'doctor' }
+  ])
   const [session, setSession] = useState({ loggedIn: false, role: 'doctor', user: null })
   const [activePage, setActivePage] = useState('Dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  
+  const [authView, setAuthView] = useState('login') // 'login', 'signup', 'success'
   const [loginForm, setLoginForm] = useState({ username: '', password: '' })
   const [loginError, setLoginError] = useState('')
-  const [hospitals, setHospitals] = useState(hospitalsSeed)
-  const [records, setRecords] = useState(recordsSeed)
-  const [payments, setPayments] = useState(paymentsSeed)
+  const [signupForm, setSignupForm] = useState({ name: '', email: '', password: '', confirmPassword: '' })
+  const [signupError, setSignupError] = useState('')
+
+  const [hospitals, setHospitals] = useState(hospitalsSeed.map(h => ({ ...h, userId: 'doctor2026' })))
+  const [records, setRecords] = useState(recordsSeed.map(r => ({ ...r, userId: 'doctor2026' })))
+  const [payments, setPayments] = useState(paymentsSeed.map(p => ({ ...p, userId: 'doctor2026' })))
   const [discrepancies, setDiscrepancies] = useState(discrepanciesSeed)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [viewState, setViewState] = useState('list')
@@ -231,21 +240,46 @@ function App() {
     const username = loginForm.username.trim()
     const password = loginForm.password.trim()
 
-    if (username === 'admin2026' && password === 'admin@123') {
-      setSession({ loggedIn: true, role: 'admin', user: { name: 'Admin User', username } })
-      setActivePage('Dashboard')
-      setLoginError('')
-      return
-    }
-
-    if (username === 'doctor2026' && password === 'doc@123') {
-      setSession({ loggedIn: true, role: 'doctor', user: { name: 'Dr. Aisha Nair', username } })
+    const user = users.find(u => (u.username === username || u.email === username) && u.password === password)
+    
+    if (user) {
+      setSession({ loggedIn: true, role: user.role, user })
       setActivePage('Dashboard')
       setLoginError('')
       return
     }
 
     setLoginError('Invalid username or password.')
+  }
+
+  const handleSignup = (event) => {
+    event.preventDefault()
+    const name = signupForm.name.trim()
+    const email = signupForm.email.trim()
+    const password = signupForm.password.trim()
+    const confirmPassword = signupForm.confirmPassword.trim()
+
+    if (!name) return setSignupError('Full name cannot be empty.')
+    if (!email || !/^\S+@\S+\.\S+$/.test(email)) return setSignupError('Please enter a valid email address.')
+    if (!password) return setSignupError('Password cannot be empty.')
+    if (password.length < 6) return setSignupError('Password must be at least 6 characters long.')
+    if (password !== confirmPassword) return setSignupError('Passwords do not match.')
+
+    const existingUser = users.find(u => u.email === email || u.username === email)
+    if (existingUser) {
+      return setSignupError('An account with this email already exists. Please log in instead.')
+    }
+
+    const newUser = {
+      username: email,
+      email,
+      password,
+      name,
+      role: 'doctor'
+    }
+
+    setUsers([...users, newUser])
+    setAuthView('success')
   }
 
   const handleLogout = () => {
@@ -255,6 +289,14 @@ function App() {
     setLoginForm({ username: '', password: '' })
     setLoginError('')
   }
+
+  const myHospitals = session.role === 'admin' ? hospitals : hospitals.filter(h => h.userId === session.user?.username)
+  const myRecords = session.role === 'admin' ? records : records.filter(r => r.userId === session.user?.username)
+  const myPayments = session.role === 'admin' ? payments : payments.filter(p => p.userId === session.user?.username)
+  const myDiscrepancies = session.role === 'admin' ? discrepancies : discrepancies.filter(d => {
+    const parentPayment = myPayments.find(p => p.hospital === d.hospital)
+    return parentPayment ? true : false // approximation for now
+  })
 
   const addService = () => {
     const name = hospitalForm.serviceName.trim()
@@ -282,6 +324,7 @@ function App() {
 
     const newHospital = {
       id: Date.now(),
+      userId: session.user.username,
       name: hospitalForm.name.trim(),
       location: hospitalForm.location || 'Bangalore',
       services: hospitalForm.services.length
@@ -314,6 +357,7 @@ function App() {
     event.preventDefault()
     setRecords((current) => [{
       id: Date.now(),
+      userId: session.user.username,
       hospital: recordForm.hospital,
       date: recordForm.date,
       service: recordForm.service,
@@ -334,6 +378,7 @@ function App() {
     event.preventDefault()
     setPayments((current) => [{
       id: Date.now(),
+      userId: session.user.username,
       hospital: paymentForm.hospital,
       date: paymentForm.date,
       amount: Number(paymentForm.amount || 0),
@@ -394,6 +439,7 @@ function App() {
         return [
           {
             id: Date.now(),
+            userId: session.user.username,
             recordId: record.id,
             hospital: record.hospital,
             date: record.date,
@@ -537,7 +583,7 @@ function App() {
           {session.role === 'doctor' && <button className="primary-btn" onClick={() => setViewState('form')}>+ Add Hospital</button>}
         </div>
         <div className="panel">
-          <div className="table-wrap"><table><thead><tr><th>Hospital</th><th>Location</th><th>Services</th><th>Action</th></tr></thead><tbody>{hospitals.map((hospital) => <tr key={hospital.id}><td>{hospital.name}</td><td>{hospital.location}</td><td><div className="service-list compact-list">{hospital.services.map((service) => <span key={`${hospital.id}-${service.name}`} className="service-pill compact-pill">{service.name}: {formatMoney(service.rate)}</span>)}</div></td><td><button type="button" className="danger-text-btn" onClick={() => setConfirmDelete({ type: 'hospital', id: hospital.id, title: 'Delete this hospital?', message: 'Deleting the hospital may also affect its associated records.' })}>Delete</button></td></tr>)}</tbody></table></div>
+          <div className="table-wrap"><table><thead><tr><th>Hospital</th><th>Location</th><th>Services</th><th>Action</th></tr></thead><tbody>{myHospitals.map((hospital) => <tr key={hospital.id}><td>{hospital.name}</td><td>{hospital.location}</td><td><div className="service-list compact-list">{hospital.services.map((service) => <span key={`${hospital.id}-${service.name}`} className="service-pill compact-pill">{service.name}: {formatMoney(service.rate)}</span>)}</div></td><td><button type="button" className="danger-text-btn" onClick={() => setConfirmDelete({ type: 'hospital', id: hospital.id, title: 'Delete this hospital?', message: 'Deleting the hospital may also affect its associated records.' })}>Delete</button></td></tr>)}</tbody></table></div>
         </div>
       </>
     )
@@ -587,7 +633,7 @@ function App() {
           <div><p className="eyebrow">Records</p><h1>My Records</h1></div>
           {session.role === 'doctor' && <button className="primary-btn" onClick={() => setViewState('form')}>+ Start New Record</button>}
         </div>
-        <div className="panel"><div className="table-wrap"><table><thead><tr><th>Hospital</th><th>Date</th><th>Service</th><th>Cases</th><th>Expected</th><th>Action</th></tr></thead><tbody>{records.map((record) => <tr key={record.id}><td>{record.hospital}</td><td>{record.date}</td><td>{record.service}</td><td>{record.cases}</td><td>{formatMoney(record.expectedAmount)}</td><td><button type="button" className="danger-text-btn" onClick={() => setConfirmDelete({ type: 'record', id: record.id, title: 'Delete this record?', message: 'This action cannot be undone.' })}>Delete</button></td></tr>)}</tbody></table></div></div>
+        <div className="panel"><div className="table-wrap"><table><thead><tr><th>Hospital</th><th>Date</th><th>Service</th><th>Cases</th><th>Expected</th><th>Action</th></tr></thead><tbody>{myRecords.map((record) => <tr key={record.id}><td>{record.hospital}</td><td>{record.date}</td><td>{record.service}</td><td>{record.cases}</td><td>{formatMoney(record.expectedAmount)}</td><td><button type="button" className="danger-text-btn" onClick={() => setConfirmDelete({ type: 'record', id: record.id, title: 'Delete this record?', message: 'This action cannot be undone.' })}>Delete</button></td></tr>)}</tbody></table></div></div>
       </>
     )
   }
@@ -622,7 +668,7 @@ function App() {
               </tr>
             </thead>
             <tbody>
-              {records.map((record) => {
+              {myRecords.map((record) => {
                 const currentStatus = record.status || 'Active'
                 return (
                   <tr key={record.id}>
@@ -667,7 +713,7 @@ function App() {
               </tr>
             </thead>
             <tbody>
-              {payments.map((payment) => (
+              {myPayments.map((payment) => (
                 <tr key={payment.id}>
                   <td>{payment.hospital}</td>
                   <td>{payment.date}</td>
@@ -690,7 +736,7 @@ function App() {
   const renderDiscrepancies = () => (
     <>
       <div className="page-header"><div><p className="eyebrow">Follow-up</p><h1>Discrepancies</h1></div></div>
-      <div className="panel"><div className="table-wrap"><table><thead><tr><th>Hospital</th><th>Expected</th><th>Received</th><th>Difference</th><th>Status</th><th>Action</th></tr></thead><tbody>{discrepancies.map((item) => <tr key={item.id}><td>{item.hospital}</td><td>{formatMoney(item.expectedAmount)}</td><td>{formatMoney(item.receivedAmount)}</td><td>{formatMoney(item.difference)}</td><td><span className={`status-badge ${item.status.toLowerCase()}`}>{item.status}</span></td><td><select value={item.status} onChange={(event) => updateDiscrepancyStatus(item.id, event.target.value)}><option value="Open">Open</option><option value="Resolved">Resolved</option></select></td></tr>)}</tbody></table></div></div>
+      <div className="panel"><div className="table-wrap"><table><thead><tr><th>Hospital</th><th>Expected</th><th>Received</th><th>Difference</th><th>Status</th><th>Action</th></tr></thead><tbody>{myDiscrepancies.map((item) => <tr key={item.id}><td>{item.hospital}</td><td>{formatMoney(item.expectedAmount)}</td><td>{formatMoney(item.receivedAmount)}</td><td>{formatMoney(item.difference)}</td><td><span className={`status-badge ${item.status.toLowerCase()}`}>{item.status}</span></td><td><select value={item.status} onChange={(event) => updateDiscrepancyStatus(item.id, event.target.value)}><option value="Open">Open</option><option value="Resolved">Resolved</option></select></td></tr>)}</tbody></table></div></div>
       
       <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
         <button type="button" className="secondary-btn" onClick={() => setActivePage('My Payments')}>← Back to Payments</button>
@@ -716,17 +762,59 @@ function App() {
             <AbstractRevenueVisual />
           </div>
           <div className="login-card">
-            <div className="login-header">
-              <p className="eyebrow neutral">Secure access</p>
-              <h1>Doctor Revenue Tracking</h1>
-            </div>
-            <form className="login-form" onSubmit={handleLogin}>
-              <label className="field"><span className="field-label">Username</span><input type="text" value={loginForm.username} onChange={(event) => setLoginForm({ ...loginForm, username: event.target.value })} placeholder="Enter username" /></label>
-              <label className="field"><span className="field-label">Password</span><input type="password" value={loginForm.password} onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })} placeholder="Enter password" /></label>
-              {loginError && <div className="login-error">{loginError}</div>}
-              <button type="submit" className="primary-btn full-width-btn">Login</button>
-            </form>
-            <div className="login-note"><strong>Demo accounts</strong><p>Doctor: doctor2026 / doc@123</p><p>Admin: admin2026 / admin@123</p></div>
+            {authView === 'login' && (
+              <>
+                <div className="login-header">
+                  <p className="eyebrow neutral">Secure access</p>
+                  <h1>Doctor Revenue Tracking</h1>
+                </div>
+                <form className="login-form" onSubmit={handleLogin}>
+                  <label className="field"><span className="field-label">Username or Email</span><input type="text" value={loginForm.username} onChange={(event) => setLoginForm({ ...loginForm, username: event.target.value })} placeholder="Enter email" /></label>
+                  <label className="field"><span className="field-label">Password</span><input type="password" value={loginForm.password} onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })} placeholder="Enter password" /></label>
+                  {loginError && <div className="login-error">{loginError}</div>}
+                  <button type="submit" className="primary-btn full-width-btn">Login</button>
+                </form>
+                <div className="mt-6 text-center">
+                  <button className="text-orange-600 font-medium hover-text-orange-700 bg-transparent border-0 p-0" style={{cursor:'pointer'}} onClick={() => { setAuthView('signup'); setSignupError(''); setLoginError(''); }}>
+                    Don't have an account? Create an account
+                  </button>
+                </div>
+                <div className="login-note"><strong>Demo accounts</strong><p>Doctor: doctor2026 / doc@123</p><p>Admin: admin2026 / admin@123</p></div>
+              </>
+            )}
+
+            {authView === 'signup' && (
+              <>
+                <div className="login-header">
+                  <p className="eyebrow neutral">Get Started</p>
+                  <h1>Create your account</h1>
+                  <p className="text-sm text-neutral-400 mt-2">Set up your account to manage your hospitals, services and payments.</p>
+                </div>
+                <form className="login-form" onSubmit={handleSignup}>
+                  <label className="field"><span className="field-label">Full Name</span><input type="text" value={signupForm.name} onChange={(event) => setSignupForm({ ...signupForm, name: event.target.value })} placeholder="John Doe" /></label>
+                  <label className="field"><span className="field-label">Email Address</span><input type="email" value={signupForm.email} onChange={(event) => setSignupForm({ ...signupForm, email: event.target.value })} placeholder="doctor@example.com" /></label>
+                  <label className="field"><span className="field-label">Password</span><input type="password" value={signupForm.password} onChange={(event) => setSignupForm({ ...signupForm, password: event.target.value })} placeholder="Create a strong password" /></label>
+                  <label className="field"><span className="field-label">Confirm Password</span><input type="password" value={signupForm.confirmPassword} onChange={(event) => setSignupForm({ ...signupForm, confirmPassword: event.target.value })} placeholder="Confirm password" /></label>
+                  {signupError && <div className="login-error">{signupError}</div>}
+                  <button type="submit" className="primary-btn full-width-btn mt-2">Create Account</button>
+                </form>
+                <div className="mt-6 text-center">
+                  <button className="text-orange-600 font-medium hover-text-orange-700 bg-transparent border-0 p-0" style={{cursor:'pointer'}} onClick={() => { setAuthView('login'); setSignupError(''); setLoginError(''); }}>
+                    Already have an account? Log in
+                  </button>
+                </div>
+              </>
+            )}
+
+            {authView === 'success' && (
+              <div className="text-center p-6">
+                <h3 className="text-2xl font-semibold text-success mb-2">✅ Account created successfully</h3>
+                <p className="text-neutral-400 mb-6">You can now log in using your new credentials.</p>
+                <button className="primary-btn full-width-btn" onClick={() => { setAuthView('login'); setSignupForm({ name: '', email: '', password: '', confirmPassword: '' }); }}>
+                  Go to Login
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
