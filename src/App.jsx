@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
+import { Eye, EyeOff, LayoutDashboard, Building2, ClipboardList, CreditCard, AlertCircle, BarChart3, Settings, LogOut, Menu, X, User, Stethoscope, CheckCircle2, ArrowUpRight } from 'lucide-react'
 import './App.css'
 
 const formatMoney = (value) =>
@@ -168,6 +169,10 @@ function App() {
   const [loginError, setLoginError] = useState('')
   const [signupForm, setSignupForm] = useState({ name: '', email: '', password: '', confirmPassword: '' })
   const [signupError, setSignupError] = useState('')
+  
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [rememberMe, setRememberMe] = useState(false)
 
   const [hospitals, setHospitals] = useState(hospitalsSeed.map(h => ({ ...h, userId: 'doctor2026' })))
   const [records, setRecords] = useState(recordsSeed.map(r => ({ ...r, userId: 'doctor2026' })))
@@ -198,17 +203,25 @@ function App() {
     status: 'Paid',
   })
 
-  const selectedHospital = hospitals.find((hospital) => hospital.name === recordForm.hospital) || hospitals[0]
+  const myHospitals = session.role === 'admin' ? hospitals : hospitals.filter(h => h.userId === session.user?.username)
+  const myRecords = session.role === 'admin' ? records : records.filter(r => r.userId === session.user?.username)
+  const myPayments = session.role === 'admin' ? payments : payments.filter(p => p.userId === session.user?.username)
+  const myDiscrepancies = session.role === 'admin' ? discrepancies : discrepancies.filter(d => {
+    const parentPayment = myPayments.find(p => p.hospital === d.hospital)
+    return parentPayment ? true : false
+  })
+
+  const selectedHospital = myHospitals.find((hospital) => hospital.name === recordForm.hospital) || myHospitals[0]
   const selectedRate = selectedHospital?.services.find((service) => service.name === recordForm.service)?.rate || 0
   const expectedValue = Number(recordForm.cases || 0) * selectedRate
 
   const hospitalSummary = useMemo(() => {
-    return hospitals.map((hospital) => {
-      const expected = records
+    return myHospitals.map((hospital) => {
+      const expected = myRecords
         .filter((record) => record.hospital === hospital.name)
         .reduce((sum, record) => sum + Number(record.expectedAmount || 0), 0)
 
-      const received = payments
+      const received = myPayments
         .filter((payment) => payment.hospital === hospital.name)
         .reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
 
@@ -219,20 +232,26 @@ function App() {
         outstanding: expected - received,
       }
     })
-  }, [hospitals, payments, records])
+  }, [myHospitals, myPayments, myRecords])
 
-  const navItems = ['Dashboard', 'My Hospitals', 'My Records', 'My Payments', 'Discrepancies']
+  const navItems = [
+    { label: 'Dashboard', icon: LayoutDashboard },
+    { label: 'My Hospitals', icon: Building2 },
+    { label: 'My Records', icon: ClipboardList },
+    { label: 'My Payments', icon: CreditCard },
+    { label: 'Discrepancies', icon: AlertCircle }
+  ]
   const totalExpected = hospitalSummary.reduce((sum, item) => sum + item.expected, 0)
   const totalReceived = hospitalSummary.reduce((sum, item) => sum + item.received, 0)
   const totalOutstanding = totalExpected - totalReceived
-  const totalDiscrepancy = discrepancies
+  const totalDiscrepancy = myDiscrepancies
     .filter((item) => item.status !== 'Resolved')
     .reduce((sum, item) => sum + Number(item.difference || 0), 0)
 
   const followUpList = [
-    { label: 'Pending payments', value: `${payments.filter((item) => item.status === 'Pending').length} items`, tone: 'warning' },
-    { label: 'Partially paid', value: `${payments.filter((item) => item.status === 'Partially Paid').length} items`, tone: 'neutral' },
-    { label: 'Open discrepancies', value: `${discrepancies.filter((item) => item.status === 'Open').length} items`, tone: 'danger' },
+    { label: 'Pending payments', value: `${myPayments.filter((item) => item.status === 'Pending').length} items`, tone: 'warning' },
+    { label: 'Partially paid', value: `${myPayments.filter((item) => item.status === 'Partially Paid').length} items`, tone: 'neutral' },
+    { label: 'Open discrepancies', value: `${myDiscrepancies.filter((item) => item.status === 'Open').length} items`, tone: 'danger' },
   ]
 
   const handleLogin = (event) => {
@@ -289,14 +308,6 @@ function App() {
     setLoginForm({ username: '', password: '' })
     setLoginError('')
   }
-
-  const myHospitals = session.role === 'admin' ? hospitals : hospitals.filter(h => h.userId === session.user?.username)
-  const myRecords = session.role === 'admin' ? records : records.filter(r => r.userId === session.user?.username)
-  const myPayments = session.role === 'admin' ? payments : payments.filter(p => p.userId === session.user?.username)
-  const myDiscrepancies = session.role === 'admin' ? discrepancies : discrepancies.filter(d => {
-    const parentPayment = myPayments.find(p => p.hospital === d.hospital)
-    return parentPayment ? true : false // approximation for now
-  })
 
   const addService = () => {
     const name = hospitalForm.serviceName.trim()
@@ -452,13 +463,21 @@ function App() {
     })
   }
 
+  const getGreeting = () => {
+    const hour = new Date().getHours()
+    if (hour >= 5 && hour < 12) return 'Good morning'
+    if (hour >= 12 && hour < 17) return 'Good afternoon'
+    if (hour >= 17 && hour < 22) return 'Good evening'
+    return 'Good night'
+  }
+
   const renderDashboard = () => (
     <section className="space-y-6 animate-fade-in">
       <header className="flex items-end justify-between">
         <div>
           <p className="text-sm text-neutral-500">Revenue overview</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-            Good morning{session.user ? `, ${session.user.name.split(' ')[0]}` : ''}
+            {getGreeting()}{session.user ? `, ${session.user.name.split(' ')[0]}` : ''}
           </h1>
         </div>
         {session.role === 'doctor' && (
@@ -490,51 +509,64 @@ function App() {
                 Requires follow-up
               </p>
             </div>
-            <span className="text-neutral-400">↗</span>
+            <ArrowUpRight className="text-neutral-400" size={20} />
           </div>
           <button className="mt-6 text-sm font-medium text-orange-600 hover-text-orange-700" onClick={() => setActivePage('My Payments')}>
             View payments →
           </button>
         </div>
 
-        <div className="card lg-col-8 bg-white p-6">
-          <h3 className="text-sm font-medium mb-4">Recent Services</h3>
-          <div className="table-wrap">
-            <table className="clean-table">
-              <thead>
-                <tr><th>Hospital</th><th>Date</th><th>Service</th><th>Expected</th></tr>
-              </thead>
-              <tbody>
-                {records.slice(0, 4).map((record) => (
-                  <tr key={record.id}>
-                    <td>{record.hospital}</td>
-                    <td>{record.date}</td>
-                    <td>{record.service}</td>
-                    <td>{formatMoney(record.expectedAmount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {myRecords.length === 0 && myHospitals.length === 0 ? (
+          <div className="card lg-col-12 bg-white p-12 flex flex-col items-center justify-center text-center">
+            <ClipboardList className="h-12 w-12 text-neutral-300 mb-4" />
+            <h3 className="text-lg font-medium text-neutral-900 mb-2">No transactions yet.</h3>
+            <p className="text-neutral-500 mb-6 max-w-md">Start recording your first hospital visit to see your revenue here.</p>
+            <button className="primary-btn" onClick={() => { setActivePage('My Records'); setViewState('form') }}>
+              + Start New Record
+            </button>
           </div>
-        </div>
+        ) : (
+          <>
+            <div className="card lg-col-8 bg-white p-6">
+              <h3 className="text-sm font-medium mb-4">Recent Services</h3>
+              <div className="table-wrap">
+                <table className="clean-table">
+                  <thead>
+                    <tr><th>Hospital</th><th>Date</th><th>Service</th><th>Expected</th></tr>
+                  </thead>
+                  <tbody>
+                    {myRecords.slice(0, 4).map((record) => (
+                      <tr key={record.id}>
+                        <td>{record.hospital}</td>
+                        <td>{record.date}</td>
+                        <td>{record.service}</td>
+                        <td>{formatMoney(record.expectedAmount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-        <div className="card lg-col-4 bg-white p-6">
-          <h3 className="text-sm font-medium mb-4">At a Glance</h3>
-          <div className="flex flex-col gap-4">
-            <div className="flex justify-between items-center border-b pb-3">
-              <span className="text-sm text-neutral-500">Total Received</span>
-              <strong className="text-success">{formatMoney(totalReceived)}</strong>
+            <div className="card lg-col-4 bg-white p-6">
+              <h3 className="text-sm font-medium mb-4">At a Glance</h3>
+              <div className="flex flex-col gap-4">
+                <div className="flex justify-between items-center border-b pb-3">
+                  <span className="text-sm text-neutral-500">Total Received</span>
+                  <strong className="text-success">{formatMoney(totalReceived)}</strong>
+                </div>
+                <div className="flex justify-between items-center border-b pb-3">
+                  <span className="text-sm text-neutral-500">Deductions</span>
+                  <strong className="text-danger">{formatMoney(totalDiscrepancy)}</strong>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-neutral-500">Active Cases</span>
+                  <strong>{myRecords.length}</strong>
+                </div>
+              </div>
             </div>
-            <div className="flex justify-between items-center border-b pb-3">
-              <span className="text-sm text-neutral-500">Deductions</span>
-              <strong className="text-danger">{formatMoney(totalDiscrepancy)}</strong>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-neutral-500">Active Cases</span>
-              <strong>{records.length}</strong>
-            </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </section>
   )
@@ -770,7 +802,19 @@ function App() {
                 </div>
                 <form className="login-form" onSubmit={handleLogin}>
                   <label className="field"><span className="field-label">Username or Email</span><input type="text" value={loginForm.username} onChange={(event) => setLoginForm({ ...loginForm, username: event.target.value })} placeholder="Enter email" /></label>
-                  <label className="field"><span className="field-label">Password</span><input type="password" value={loginForm.password} onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })} placeholder="Enter password" /></label>
+                  <label className="field relative">
+                    <span className="field-label">Password</span>
+                    <div style={{ position: 'relative' }}>
+                      <input type={showPassword ? 'text' : 'password'} value={loginForm.password} onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })} placeholder="Enter password" style={{ paddingRight: '40px' }} />
+                      <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280' }}>
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', fontSize: '14px', color: '#4b5563', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} style={{ width: '16px', height: '16px' }} />
+                    Remember me
+                  </label>
                   {loginError && <div className="login-error">{loginError}</div>}
                   <button type="submit" className="primary-btn full-width-btn">Login</button>
                 </form>
@@ -779,7 +823,7 @@ function App() {
                     Don't have an account? Create an account
                   </button>
                 </div>
-                <div className="login-note"><strong>Demo accounts</strong><p>Doctor: doctor2026 / doc@123</p><p>Admin: admin2026 / admin@123</p></div>
+                <div className="login-note mt-6 text-xs text-neutral-400"><strong>Demo accounts</strong><p>Doctor: doctor2026 / doc@123</p><p>Admin: admin2026 / admin@123</p></div>
               </>
             )}
 
@@ -793,8 +837,24 @@ function App() {
                 <form className="login-form" onSubmit={handleSignup}>
                   <label className="field"><span className="field-label">Full Name</span><input type="text" value={signupForm.name} onChange={(event) => setSignupForm({ ...signupForm, name: event.target.value })} placeholder="John Doe" /></label>
                   <label className="field"><span className="field-label">Email Address</span><input type="email" value={signupForm.email} onChange={(event) => setSignupForm({ ...signupForm, email: event.target.value })} placeholder="doctor@example.com" /></label>
-                  <label className="field"><span className="field-label">Password</span><input type="password" value={signupForm.password} onChange={(event) => setSignupForm({ ...signupForm, password: event.target.value })} placeholder="Create a strong password" /></label>
-                  <label className="field"><span className="field-label">Confirm Password</span><input type="password" value={signupForm.confirmPassword} onChange={(event) => setSignupForm({ ...signupForm, confirmPassword: event.target.value })} placeholder="Confirm password" /></label>
+                  <label className="field">
+                    <span className="field-label">Password</span>
+                    <div style={{ position: 'relative' }}>
+                      <input type={showPassword ? 'text' : 'password'} value={signupForm.password} onChange={(event) => setSignupForm({ ...signupForm, password: event.target.value })} placeholder="Create a strong password" style={{ paddingRight: '40px' }} />
+                      <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280' }}>
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </label>
+                  <label className="field">
+                    <span className="field-label">Confirm Password</span>
+                    <div style={{ position: 'relative' }}>
+                      <input type={showConfirmPassword ? 'text' : 'password'} value={signupForm.confirmPassword} onChange={(event) => setSignupForm({ ...signupForm, confirmPassword: event.target.value })} placeholder="Confirm password" style={{ paddingRight: '40px' }} />
+                      <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280' }}>
+                        {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </label>
                   {signupError && <div className="login-error">{signupError}</div>}
                   <button type="submit" className="primary-btn full-width-btn mt-2">Create Account</button>
                 </form>
@@ -808,7 +868,8 @@ function App() {
 
             {authView === 'success' && (
               <div className="text-center p-6">
-                <h3 className="text-2xl font-semibold text-success mb-2">✅ Account created successfully</h3>
+                <div className="flex justify-center mb-4"><CheckCircle2 className="h-12 w-12 text-success" /></div>
+                <h3 className="text-2xl font-semibold text-success mb-2">Account created successfully</h3>
                 <p className="text-neutral-400 mb-6">You can now log in using your new credentials.</p>
                 <button className="primary-btn full-width-btn" onClick={() => { setAuthView('login'); setSignupForm({ name: '', email: '', password: '', confirmPassword: '' }); }}>
                   Go to Login
@@ -823,22 +884,58 @@ function App() {
 
   return (
     <>
-      <div className="app-shell">
-        <button type="button" className="mobile-toggle" aria-label="Toggle menu" onClick={() => setSidebarOpen((value) => !value)}>☰</button>
-        <aside className={sidebarOpen ? 'sidebar open' : 'sidebar'}>
-          <div className="brand-block"><div className="brand-mark">VD</div><div><p className="eyebrow neutral">{session.role === 'admin' ? 'Admin' : 'Doctor'}</p><h2>Revenue Ledger</h2></div></div>
-          <nav className="sidebar-nav" aria-label="Sidebar navigation">
-            {navItems.map((item) => (
-              <button key={item} type="button" className={activePage === item ? 'nav-item active' : 'nav-item'} onClick={() => { setActivePage(item); setViewState('list'); setSidebarOpen(false) }}>
-                <span className="nav-icon">{item === 'Dashboard' ? '🏠' : item === 'My Hospitals' ? '🏥' : item === 'My Records' ? '🧾' : item === 'My Payments' ? '₹' : '⚠️'}</span>
-                {item}
+      <div className="app-shell flex h-screen bg-neutral-50 overflow-hidden relative w-full">
+        <button type="button" className="mobile-toggle fixed top-4 left-4 z-50 p-2 bg-white rounded-md shadow-sm border md:hidden" aria-label="Toggle menu" onClick={() => setSidebarOpen((value) => !value)}>
+          {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
+        <aside className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform fixed md:static inset-y-0 left-0 z-40 w-64 bg-white border-r flex flex-col justify-between`}>
+          <div>
+            <div className="p-6 pb-2">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-600 text-white">
+                  <Stethoscope size={20} />
+                </div>
+                <div>
+                  <p className="font-semibold tracking-tight text-neutral-900 leading-tight">VisitPay</p>
+                  <p className="text-xs text-neutral-500 font-medium leading-tight">{session.role === 'admin' ? 'Admin Panel' : 'Consultant Revenue'}</p>
+                </div>
+              </div>
+            </div>
+            
+            <nav className="p-4 space-y-1" aria-label="Sidebar navigation">
+              <div className="text-xs font-semibold text-neutral-400 mb-2 px-3 uppercase tracking-wider">Main</div>
+              {navItems.map((item) => {
+                const isActive = activePage === item.label
+                return (
+                  <button key={item.label} type="button" className={`flex items-center w-full gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${isActive ? 'bg-orange-50 text-orange-700' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`} onClick={() => { setActivePage(item.label); setViewState('list'); setSidebarOpen(false) }}>
+                    <item.icon size={18} className={isActive ? 'text-orange-600' : 'text-neutral-400'} />
+                    {item.label}
+                  </button>
+                )
+              })}
+            </nav>
+          </div>
+
+          <div className="p-4 border-t">
+            <div className="flex items-center justify-between px-3 py-2">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-full bg-neutral-200 flex items-center justify-center text-neutral-600 text-sm font-semibold">
+                  {session.user ? session.user.name.charAt(0) : <User size={16} />}
+                </div>
+                <div className="overflow-hidden">
+                  <p className="text-sm font-medium text-neutral-900 truncate">{session.user?.name || 'User'}</p>
+                  <p className="text-xs text-neutral-500 truncate">{session.user?.email || session.user?.username}</p>
+                </div>
+              </div>
+              <button onClick={handleLogout} className="text-neutral-400 hover:text-danger p-1 rounded transition-colors" title="Logout">
+                <LogOut size={16} />
               </button>
-            ))}
-            <button type="button" className="nav-item logout-item" onClick={handleLogout}><span className="nav-icon">🚪</span>Logout</button>
-          </nav>
+            </div>
+          </div>
         </aside>
-        {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
-        <main className="content-area">{renderPage()}</main>
+        
+        {sidebarOpen && <div className="fixed inset-0 bg-neutral-900/50 z-30 md:hidden" onClick={() => setSidebarOpen(false)} />}
+        <main className="flex-1 overflow-y-auto p-4 md:p-8 md:ml-0">{renderPage()}</main>
       </div>
 
       {confirmDelete && (
