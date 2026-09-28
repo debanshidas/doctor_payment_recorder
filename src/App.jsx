@@ -165,6 +165,7 @@ function App() {
   const [payments, setPayments] = useState(paymentsSeed)
   const [discrepancies, setDiscrepancies] = useState(discrepanciesSeed)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [viewState, setViewState] = useState('list')
 
   const [hospitalForm, setHospitalForm] = useState({
     name: '',
@@ -306,6 +307,7 @@ function App() {
       serviceRate: '1000',
       services: [{ name: 'Consultation', rate: 1000 }],
     })
+    setViewState('success')
   }
 
   const handleRecordSave = (event) => {
@@ -325,6 +327,7 @@ function App() {
       service: selectedHospital?.services[0]?.name || 'Consultation',
       cases: '5',
     }))
+    setViewState('success')
   }
 
   const handlePaymentSave = (event) => {
@@ -461,56 +464,111 @@ function App() {
     </>
   )
 
-  const renderHospitals = () => (
-    <>
-      <div className="page-header"><div><p className="eyebrow">Hospitals</p><h1>{session.role === 'admin' ? 'Hospital List' : 'My Hospitals'}</h1></div></div>
-      {session.role === 'doctor' && (
-        <div className="panel form-panel">
-          <h3>Add Hospital</h3>
-          <form className="grid-form" onSubmit={handleHospitalSave}>
-            <label className="field"><span className="field-label">Hospital Name</span><input type="text" value={hospitalForm.name} onChange={(event) => setHospitalForm({ ...hospitalForm, name: event.target.value })} placeholder="Hospital name" /></label>
-            <label className="field"><span className="field-label">Location</span><input type="text" value={hospitalForm.location} onChange={(event) => setHospitalForm({ ...hospitalForm, location: event.target.value })} placeholder="Bangalore" /></label>
-            <label className="field"><span className="field-label">Service Name</span><input type="text" value={hospitalForm.serviceName} onChange={(event) => setHospitalForm({ ...hospitalForm, serviceName: event.target.value })} placeholder="Consultation" /></label>
-            <label className="field"><span className="field-label">Service Rate (₹)</span><input type="number" min="0" value={hospitalForm.serviceRate} onChange={(event) => setHospitalForm({ ...hospitalForm, serviceRate: event.target.value })} placeholder="1000" /></label>
-            <div className="field"><span className="field-label">&nbsp;</span><button type="button" className="secondary-btn" onClick={addService}>Add service</button></div>
-            <div className="field full-span"><span className="field-label">&nbsp;</span><button type="submit" className="primary-btn">Save hospital</button></div>
-          </form>
-          <div className="service-list">{hospitalForm.services.map((service) => <span key={`${service.name}-${service.rate}`} className="service-pill">{service.name} · {formatMoney(service.rate)}</span>)}</div>
-        </div>
-      )}
+  const renderHospitals = () => {
+    if (viewState === 'form') {
+      return (
+        <>
+          <div className="page-header"><div><p className="eyebrow">Hospitals</p><h1>Add Hospital</h1></div></div>
+          <div className="panel form-panel">
+            <form className="grid-form" onSubmit={handleHospitalSave}>
+              <label className="field"><span className="field-label">Hospital Name</span><input type="text" value={hospitalForm.name} onChange={(event) => setHospitalForm({ ...hospitalForm, name: event.target.value })} placeholder="Hospital name" /></label>
+              <label className="field"><span className="field-label">Location</span><input type="text" value={hospitalForm.location} onChange={(event) => setHospitalForm({ ...hospitalForm, location: event.target.value })} placeholder="Bangalore" /></label>
+              <label className="field"><span className="field-label">Service Name</span><input type="text" value={hospitalForm.serviceName} onChange={(event) => setHospitalForm({ ...hospitalForm, serviceName: event.target.value })} placeholder="Consultation" /></label>
+              <label className="field"><span className="field-label">Service Rate (₹)</span><input type="number" min="0" value={hospitalForm.serviceRate} onChange={(event) => setHospitalForm({ ...hospitalForm, serviceRate: event.target.value })} placeholder="1000" /></label>
+              <div className="field"><span className="field-label">&nbsp;</span><button type="button" className="secondary-btn" onClick={addService}>Add service</button></div>
+              
+              <div className="field full-span form-actions" style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                <button type="button" className="secondary-btn" onClick={() => setViewState('list')}>← Back</button>
+                <button type="submit" className="primary-btn">Save Hospital & Continue →</button>
+              </div>
+            </form>
+            <div className="service-list">{hospitalForm.services.map((service) => <span key={`${service.name}-${service.rate}`} className="service-pill">{service.name} · {formatMoney(service.rate)}</span>)}</div>
+          </div>
+        </>
+      )
+    }
 
-      <div className="panel">
-        <div className="table-wrap"><table><thead><tr><th>Hospital</th><th>Location</th><th>Services</th><th>Action</th></tr></thead><tbody>{hospitals.map((hospital) => <tr key={hospital.id}><td>{hospital.name}</td><td>{hospital.location}</td><td><div className="service-list compact-list">{hospital.services.map((service) => <span key={`${hospital.id}-${service.name}`} className="service-pill compact-pill">{service.name}: {formatMoney(service.rate)}</span>)}</div></td><td><button type="button" className="danger-text-btn" onClick={() => setConfirmDelete({ type: 'hospital', id: hospital.id, title: 'Delete this hospital?', message: 'Deleting the hospital may also affect its associated records.' })}>Delete</button></td></tr>)}</tbody></table></div>
-      </div>
-    </>
-  )
-
-  const renderRecords = () => (
-    <>
-      <div className="page-header"><div><p className="eyebrow">Records</p><h1>{session.role === 'admin' ? 'All Records' : 'My Records'}</h1></div></div>
-      {session.role === 'doctor' && (
-        <div className="panel form-panel">
-          <h3>Add Visit Record</h3>
-          <form className="grid-form" onSubmit={handleRecordSave}>
-            <label className="field"><span className="field-label">Hospital</span><select value={recordForm.hospital} onChange={(event) => { const nextHospital = hospitals.find((hospital) => hospital.name === event.target.value); setRecordForm({ ...recordForm, hospital: event.target.value, service: nextHospital?.services[0]?.name || 'Consultation' }) }}>
-              {hospitals.map((hospital) => <option key={hospital.id} value={hospital.name}>{hospital.name}</option>)}
-            </select></label>
-            <label className="field"><span className="field-label">Date</span><input type="date" value={recordForm.date} onChange={(event) => setRecordForm({ ...recordForm, date: event.target.value })} /></label>
-            <label className="field"><span className="field-label">Service</span><select value={recordForm.service} onChange={(event) => setRecordForm({ ...recordForm, service: event.target.value })}>{(selectedHospital?.services || []).map((service) => <option key={service.name} value={service.name}>{service.name}</option>)}</select></label>
-            <label className="field"><span className="field-label">Number of Cases</span><input type="number" min="0" value={recordForm.cases} onChange={(event) => setRecordForm({ ...recordForm, cases: event.target.value })} /></label>
-            <label className="field"><span className="field-label">Rate per Case</span><input type="text" value={formatMoney(selectedRate)} readOnly /></label>
-            <label className="field full-span"><span className="field-label">Expected Amount</span><input type="text" value={formatMoney(expectedValue)} readOnly /></label>
-            <div className="field full-span"><span className="field-label">&nbsp;</span><button type="submit" className="primary-btn">Save record</button></div>
-          </form>
+    if (viewState === 'success') {
+      return (
+        <div className="panel success-panel" style={{ textAlign: 'center', padding: '40px 20px' }}>
+          <h3 style={{ color: 'var(--success)', fontSize: '1.5rem', marginBottom: '24px' }}>✅ Hospital Added Successfully</h3>
+          <div className="form-actions" style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
+             <button type="button" className="secondary-btn" onClick={() => setViewState('list')}>View Hospitals</button>
+             <button type="button" className="secondary-btn" onClick={() => setViewState('form')}>+ Add Another</button>
+             <button type="button" className="primary-btn" onClick={() => { setActivePage('My Records'); setViewState('form') }}>Next: Add Visit Record →</button>
+          </div>
         </div>
-      )}
-      <div className="panel"><div className="table-wrap"><table><thead><tr><th>Hospital</th><th>Date</th><th>Service</th><th>Cases</th><th>Expected</th><th>Action</th></tr></thead><tbody>{records.map((record) => <tr key={record.id}><td>{record.hospital}</td><td>{record.date}</td><td>{record.service}</td><td>{record.cases}</td><td>{formatMoney(record.expectedAmount)}</td><td><button type="button" className="danger-text-btn" onClick={() => setConfirmDelete({ type: 'record', id: record.id, title: 'Delete this record?', message: 'This action cannot be undone.' })}>Delete</button></td></tr>)}</tbody></table></div></div>
-    </>
-  )
+      )
+    }
+
+    return (
+      <>
+        <div className="page-header">
+          <div><p className="eyebrow">Hospitals</p><h1>My Hospitals</h1></div>
+          {session.role === 'doctor' && <button className="primary-btn" onClick={() => setViewState('form')}>+ Add Hospital</button>}
+        </div>
+        <div className="panel">
+          <div className="table-wrap"><table><thead><tr><th>Hospital</th><th>Location</th><th>Services</th><th>Action</th></tr></thead><tbody>{hospitals.map((hospital) => <tr key={hospital.id}><td>{hospital.name}</td><td>{hospital.location}</td><td><div className="service-list compact-list">{hospital.services.map((service) => <span key={`${hospital.id}-${service.name}`} className="service-pill compact-pill">{service.name}: {formatMoney(service.rate)}</span>)}</div></td><td><button type="button" className="danger-text-btn" onClick={() => setConfirmDelete({ type: 'hospital', id: hospital.id, title: 'Delete this hospital?', message: 'Deleting the hospital may also affect its associated records.' })}>Delete</button></td></tr>)}</tbody></table></div>
+        </div>
+      </>
+    )
+  }
+
+  const renderRecords = () => {
+    if (viewState === 'form') {
+      return (
+        <>
+          <div className="page-header"><div><p className="eyebrow">Records</p><h1>Add Visit Record</h1></div></div>
+          <div className="panel form-panel">
+            <form className="grid-form" onSubmit={handleRecordSave}>
+              <label className="field"><span className="field-label">Hospital</span><select value={recordForm.hospital} onChange={(event) => { const nextHospital = hospitals.find((hospital) => hospital.name === event.target.value); setRecordForm({ ...recordForm, hospital: event.target.value, service: nextHospital?.services[0]?.name || 'Consultation' }) }}>
+                {hospitals.map((hospital) => <option key={hospital.id} value={hospital.name}>{hospital.name}</option>)}
+              </select></label>
+              <label className="field"><span className="field-label">Date</span><input type="date" value={recordForm.date} onChange={(event) => setRecordForm({ ...recordForm, date: event.target.value })} /></label>
+              <label className="field"><span className="field-label">Service</span><select value={recordForm.service} onChange={(event) => setRecordForm({ ...recordForm, service: event.target.value })}>{(selectedHospital?.services || []).map((service) => <option key={service.name} value={service.name}>{service.name}</option>)}</select></label>
+              <label className="field"><span className="field-label">Number of Cases</span><input type="number" min="0" value={recordForm.cases} onChange={(event) => setRecordForm({ ...recordForm, cases: event.target.value })} /></label>
+              <label className="field"><span className="field-label">Rate per Case</span><input type="text" value={formatMoney(selectedRate)} readOnly /></label>
+              <label className="field"><span className="field-label">Expected Amount</span><input type="text" value={formatMoney(expectedValue)} readOnly /></label>
+              <div className="field full-span form-actions" style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                <button type="button" className="secondary-btn" onClick={() => setViewState('list')}>← Back</button>
+                <button type="submit" className="primary-btn">Save Record & Continue →</button>
+              </div>
+            </form>
+          </div>
+        </>
+      )
+    }
+
+    if (viewState === 'success') {
+      return (
+        <div className="panel success-panel" style={{ textAlign: 'center', padding: '40px 20px' }}>
+          <h3 style={{ color: 'var(--success)', fontSize: '1.5rem', margin: '0 0 24px' }}>✅ Visit Record Logged Successfully</h3>
+          <div className="form-actions" style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
+             <button type="button" className="secondary-btn" onClick={() => setViewState('list')}>View Records</button>
+             <button type="button" className="secondary-btn" onClick={() => setViewState('form')}>+ Log Another</button>
+             <button type="button" className="primary-btn" onClick={() => { setActivePage('My Payments'); setViewState('list') }}>Next: Track Payments →</button>
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <>
+        <div className="page-header">
+          <div><p className="eyebrow">Records</p><h1>My Records</h1></div>
+          {session.role === 'doctor' && <button className="primary-btn" onClick={() => setViewState('form')}>+ Start New Record</button>}
+        </div>
+        <div className="panel"><div className="table-wrap"><table><thead><tr><th>Hospital</th><th>Date</th><th>Service</th><th>Cases</th><th>Expected</th><th>Action</th></tr></thead><tbody>{records.map((record) => <tr key={record.id}><td>{record.hospital}</td><td>{record.date}</td><td>{record.service}</td><td>{record.cases}</td><td>{formatMoney(record.expectedAmount)}</td><td><button type="button" className="danger-text-btn" onClick={() => setConfirmDelete({ type: 'record', id: record.id, title: 'Delete this record?', message: 'This action cannot be undone.' })}>Delete</button></td></tr>)}</tbody></table></div></div>
+      </>
+    )
+  }
 
   const renderPayments = () => (
     <>
-      <div className="page-header"><div><p className="eyebrow">Payments</p><h1>{session.role === 'admin' ? 'Payment Ledger' : 'My Payments / Active Cases'}</h1></div></div>
+      <div className="page-header">
+        <div><p className="eyebrow">Payments</p><h1>My Payments / Active Cases</h1></div>
+        {session.role === 'doctor' && <button className="primary-btn" onClick={() => { setActivePage('My Records'); setViewState('form') }}>+ Start New Record</button>}
+      </div>
       
       <div className="panel">
         <div className="panel-header"><h3>Active Cases</h3></div>
@@ -581,6 +639,11 @@ function App() {
           </table>
         </div>
       </div>
+      
+      <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+        <button type="button" className="secondary-btn" onClick={() => setActivePage('Dashboard')}>← Back to Dashboard</button>
+        <button type="button" className="primary-btn" onClick={() => setActivePage('Discrepancies')}>Next: Reconciliation →</button>
+      </div>
     </>
   )
 
@@ -588,6 +651,11 @@ function App() {
     <>
       <div className="page-header"><div><p className="eyebrow">Follow-up</p><h1>Discrepancies</h1></div></div>
       <div className="panel"><div className="table-wrap"><table><thead><tr><th>Hospital</th><th>Expected</th><th>Received</th><th>Difference</th><th>Status</th><th>Action</th></tr></thead><tbody>{discrepancies.map((item) => <tr key={item.id}><td>{item.hospital}</td><td>{formatMoney(item.expectedAmount)}</td><td>{formatMoney(item.receivedAmount)}</td><td>{formatMoney(item.difference)}</td><td><span className={`status-badge ${item.status.toLowerCase()}`}>{item.status}</span></td><td><select value={item.status} onChange={(event) => updateDiscrepancyStatus(item.id, event.target.value)}><option value="Open">Open</option><option value="Resolved">Resolved</option></select></td></tr>)}</tbody></table></div></div>
+      
+      <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+        <button type="button" className="secondary-btn" onClick={() => setActivePage('My Payments')}>← Back to Payments</button>
+        <button type="button" className="primary-btn" onClick={() => setActivePage('Dashboard')}>Done / Back to Dashboard</button>
+      </div>
     </>
   )
 
@@ -633,7 +701,7 @@ function App() {
           <div className="brand-block"><div className="brand-mark">VD</div><div><p className="eyebrow neutral">{session.role === 'admin' ? 'Admin' : 'Doctor'}</p><h2>Revenue Ledger</h2></div></div>
           <nav className="sidebar-nav" aria-label="Sidebar navigation">
             {navItems.map((item) => (
-              <button key={item} type="button" className={activePage === item ? 'nav-item active' : 'nav-item'} onClick={() => { setActivePage(item); setSidebarOpen(false) }}>
+              <button key={item} type="button" className={activePage === item ? 'nav-item active' : 'nav-item'} onClick={() => { setActivePage(item); setViewState('list'); setSidebarOpen(false) }}>
                 <span className="nav-icon">{item === 'Dashboard' ? '🏠' : item === 'My Hospitals' ? '🏥' : item === 'My Records' ? '🧾' : item === 'My Payments' ? '₹' : '⚠️'}</span>
                 {item}
               </button>
