@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Eye, EyeOff, LayoutDashboard, Building2, FileText, IndianRupee, AlertTriangle, LogOut, Menu, X, Plus, User, Upload, ChevronDown, ChevronRight, Activity, TrendingUp, Receipt, CheckCircle2, XCircle, Clock, ArrowRight, Trash2, Edit3, Search } from 'lucide-react'
 import './App.css'
 
-const API = '/api'
+const API = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '') + '/api'
 
 const formatMoney = (v) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Number(v || 0))

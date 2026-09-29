@@ -663,7 +663,9 @@ app.get('/api/admin/audit-logs', adminAuth, async (req, res) => {
     } catch (err) { res.status(500).json({ error: 'Failed to fetch audit logs.' }); }
 });
 
-const PORT = 3001;
+app.get('/', (req, res) => res.json({ status: 'ok' }));
+
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });

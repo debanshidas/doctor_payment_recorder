@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: doctrack-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: node server/index.js
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
