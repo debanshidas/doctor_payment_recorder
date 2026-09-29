@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "concurrently \"node server/index.js\" \"vite\" \"npm run dev --prefix admin\"",
     "dev:client": "vite",
@@ -18,8 +21,7 @@
     "express": "^5.2.1",
     "lucide-react": "^1.48.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "sqlite3": "^6.0.1"
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "@types/react": "^19.2.18",
