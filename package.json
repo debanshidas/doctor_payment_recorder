@@ -16,6 +16,7 @@
     "deploy": "vite build && gh-pages -d dist"
   },
   "dependencies": {
+    "@libsql/client": "^0.18.0",
     "concurrently": "^10.0.5",
     "cors": "^2.8.6",
     "express": "^5.2.1",

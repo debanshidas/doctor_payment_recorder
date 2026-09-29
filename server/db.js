@@ -1,30 +1,22 @@
-import { DatabaseSync } from 'node:sqlite';
 import crypto from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const dbPath = process.env.DB_PATH || path.resolve(__dirname, 'database.sqlite');
-
-const db = new DatabaseSync(dbPath);
-console.log('Connected to SQLite database at', dbPath);
-
-db.exec('PRAGMA foreign_keys = ON');
-
-db.exec(`CREATE TABLE IF NOT EXISTS users (
+const SCHEMA = [
+`CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     email TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
     password_hash TEXT NOT NULL,
     role TEXT DEFAULT 'doctor',
+    status TEXT DEFAULT 'active',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     last_login DATETIME
-)`);
-
-db.exec(`CREATE TABLE IF NOT EXISTS hospitals (
+)`,
+`CREATE TABLE IF NOT EXISTS hospitals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     name TEXT NOT NULL,
@@ -39,9 +31,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS hospitals (
     finance_contact_phone TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-)`);
-
-db.exec(`CREATE TABLE IF NOT EXISTS procedures (
+)`,
+`CREATE TABLE IF NOT EXISTS procedures (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     hospital_id INTEGER NOT NULL,
@@ -59,9 +50,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS procedures (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY(hospital_id) REFERENCES hospitals(id) ON DELETE CASCADE
-)`);
-
-db.exec(`CREATE TABLE IF NOT EXISTS payouts (
+)`,
+`CREATE TABLE IF NOT EXISTS payouts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     hospital_id INTEGER NOT NULL,
@@ -79,17 +69,15 @@ db.exec(`CREATE TABLE IF NOT EXISTS payouts (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY(hospital_id) REFERENCES hospitals(id) ON DELETE CASCADE
-)`);
-
-db.exec(`CREATE TABLE IF NOT EXISTS payout_procedures (
+)`,
+`CREATE TABLE IF NOT EXISTS payout_procedures (
     payout_id INTEGER NOT NULL,
     procedure_id INTEGER NOT NULL,
     PRIMARY KEY(payout_id, procedure_id),
     FOREIGN KEY(payout_id) REFERENCES payouts(id) ON DELETE CASCADE,
     FOREIGN KEY(procedure_id) REFERENCES procedures(id) ON DELETE CASCADE
-)`);
-
-db.exec(`CREATE TABLE IF NOT EXISTS statements (
+)`,
+`CREATE TABLE IF NOT EXISTS statements (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     hospital_id INTEGER NOT NULL,
@@ -102,15 +90,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS statements (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY(hospital_id) REFERENCES hospitals(id) ON DELETE CASCADE
-)`);
-
-try {
-    db.exec(`ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'`);
-} catch {
-    // column already exists
-}
-
-db.exec(`CREATE TABLE IF NOT EXISTS audit_logs (
+)`,
+`CREATE TABLE IF NOT EXISTS audit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     admin_id INTEGER NOT NULL,
     action TEXT NOT NULL,
@@ -119,9 +100,59 @@ db.exec(`CREATE TABLE IF NOT EXISTS audit_logs (
     details TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(admin_id) REFERENCES users(id) ON DELETE CASCADE
-)`);
+)`,
+];
+
+async function createRemoteDb(url, authToken) {
+    const { createClient } = await import('@libsql/client/web');
+    const client = createClient({ url, authToken });
+    const toObjects = (rs) => rs.rows.map(r => Object.fromEntries(rs.columns.map((c, i) => [c, r[i]])));
+    return {
+        label: `Turso (${url})`,
+        exec: (sql) => client.execute(sql),
+        all: async (sql, args) => toObjects(await client.execute({ sql, args })),
+        get: async (sql, args) => toObjects(await client.execute({ sql, args }))[0],
+        run: async (sql, args) => {
+            const rs = await client.execute({ sql, args });
+            return { lastID: Number(rs.lastInsertRowid ?? 0), changes: rs.rowsAffected };
+        },
+    };
+}
+
+async function createLocalDb(file) {
+    const { DatabaseSync } = await import('node:sqlite');
+    const db = new DatabaseSync(file);
+    db.exec('PRAGMA foreign_keys = ON');
+    return {
+        label: file,
+        exec: async (sql) => db.exec(sql),
+        all: async (sql, args) => db.prepare(sql).all(...args),
+        get: async (sql, args) => db.prepare(sql).get(...args),
+        run: async (sql, args) => {
+            const r = db.prepare(sql).run(...args);
+            return { lastID: Number(r.lastInsertRowid), changes: Number(r.changes) };
+        },
+    };
+}
+
+const db = process.env.TURSO_DATABASE_URL
+    ? await createRemoteDb(process.env.TURSO_DATABASE_URL, process.env.TURSO_AUTH_TOKEN)
+    : await createLocalDb(process.env.DB_PATH || path.resolve(__dirname, 'database.sqlite'));
+
+for (const stmt of SCHEMA) await db.exec(stmt);
+
+try {
+    await db.exec(`ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'`);
+} catch {
+    // column already exists on databases created before it was added
+}
 
 const adminHash = crypto.createHash('sha256').update(process.env.ADMIN_PASSWORD || 'admin123').digest('hex');
-db.prepare(`INSERT OR IGNORE INTO users (username, email, name, password_hash, role, status) VALUES ('admin', 'admin@doctrack.com', 'System Admin', ?, 'admin', 'active')`).run(adminHash);
+await db.run(
+    `INSERT OR IGNORE INTO users (username, email, name, password_hash, role, status) VALUES ('admin', 'admin@doctrack.com', 'System Admin', ?, 'admin', 'active')`,
+    [adminHash]
+);
+
+console.log('Connected to database:', db.label);
 
 export default db;

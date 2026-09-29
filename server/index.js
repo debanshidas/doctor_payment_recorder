@@ -7,14 +7,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const dbAll = async (query, params = []) => db.prepare(query).all(...params);
-
-const dbRun = async (query, params = []) => {
-    const r = db.prepare(query).run(...params);
-    return { lastID: Number(r.lastInsertRowid), changes: Number(r.changes) };
-};
-
-const dbGet = async (query, params = []) => db.prepare(query).get(...params);
+const dbAll = (query, params = []) => db.all(query, params);
+const dbRun = (query, params = []) => db.run(query, params);
+const dbGet = (query, params = []) => db.get(query, params);
 
 function hashPassword(password) {
     return crypto.createHash('sha256').update(password).digest('hex');
