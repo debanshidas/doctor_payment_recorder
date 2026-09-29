@@ -1,15 +1,13 @@
-import { useMemo, useState, useEffect, useCallback } from 'react'
-import { Eye, EyeOff, LayoutDashboard, Building2, FileText, IndianRupee, AlertTriangle, LogOut, Menu, X, ArrowUpRight, BarChart3, Settings, Plus, User } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Eye, EyeOff, LayoutDashboard, Building2, FileText, IndianRupee, AlertTriangle, LogOut, Menu, X, Plus, User, Upload, ChevronDown, ChevronRight, Activity, TrendingUp, Receipt, CheckCircle2, XCircle, Clock, ArrowRight, Trash2, Edit3, Search } from 'lucide-react'
 import './App.css'
 
 const API = '/api'
 
-const formatMoney = (value) =>
-  new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(Number(value || 0))
+const formatMoney = (v) =>
+  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Number(v || 0))
+
+const formatPct = (v) => `${Number(v || 0).toFixed(1)}%`
 
 async function api(path, opts = {}) {
   const session = JSON.parse(localStorage.getItem('doctrack_session') || '{}')
@@ -24,936 +22,842 @@ async function api(path, opts = {}) {
 }
 
 function App() {
-  const [session, setSessionState] = useState(() => {
+  const [session, setSessionRaw] = useState(() => {
     try {
-      const saved = localStorage.getItem('doctrack_session')
-      if (saved) return JSON.parse(saved)
-      const remembered = localStorage.getItem('doctorSession')
-      if (remembered) return JSON.parse(remembered)
-    } catch {}
-    return { loggedIn: false, role: 'doctor', user: null }
+      return JSON.parse(localStorage.getItem('doctrack_session') || 'null') ||
+             JSON.parse(localStorage.getItem('doctorSession') || 'null') ||
+             { loggedIn: false, user: null }
+    } catch { return { loggedIn: false, user: null } }
   })
+  const setSession = (v) => { setSessionRaw(v); localStorage.setItem('doctrack_session', JSON.stringify(v)) }
 
-  const setSession = useCallback((val) => {
-    setSessionState(val)
-    localStorage.setItem('doctrack_session', JSON.stringify(val))
-  }, [])
-
-  const [activePage, setActivePage] = useState('Dashboard')
+  const [page, setPage] = useState('Dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
-  const [showLoginPassword, setShowLoginPassword] = useState(false)
-  const [showSignupPassword, setShowSignupPassword] = useState(false)
-  const [showSignupConfirmPassword, setShowSignupConfirmPassword] = useState(false)
-
   const [authView, setAuthView] = useState('login')
   const [loginForm, setLoginForm] = useState({ username: '', password: '' })
   const [loginError, setLoginError] = useState('')
-  const [signupForm, setSignupForm] = useState({ username: '', password: '', confirmPassword: '' })
+  const [signupForm, setSignupForm] = useState({})
   const [signupError, setSignupError] = useState('')
+  const [showPw, setShowPw] = useState(false)
+  const [rememberMe, setRememberMe] = useState(false)
 
+  const [dashboard, setDashboard] = useState(null)
   const [hospitals, setHospitals] = useState([])
-  const [records, setRecords] = useState([])
-  const [payments, setPayments] = useState([])
-  const [discrepancies, setDiscrepancies] = useState([])
-  const [confirmDelete, setConfirmDelete] = useState(null)
-  const [viewState, setViewState] = useState('list')
+  const [procedures, setProcedures] = useState([])
+  const [payouts, setPayouts] = useState([])
+  const [reconciliation, setReconciliation] = useState(null)
+  const [statements, setStatements] = useState([])
 
-  const loadData = useCallback(async () => {
-    if (!session.loggedIn || !session.user?.id) return
+  const [showModal, setShowModal] = useState(null)
+  const [modalStep, setModalStep] = useState(1)
+  const [procForm, setProcForm] = useState({ hospital_id: '', date: new Date().toISOString().split('T')[0], patient_name: '', procedure_type: 'Consultation', cases: '1', gross_amount: '' })
+  const [hospForm, setHospForm] = useState({ name: '', location: 'Bangalore', payout_percentage: '80', fixed_fee: '0', tds_rate: '10', deduction_rate: '2', settlement_cycle: '30 days', finance_contact_name: '', finance_contact_email: '', finance_contact_phone: '' })
+  const [payoutForm, setPayoutForm] = useState({ hospital_id: '', date: new Date().toISOString().split('T')[0], period: '', actual_net: '', transaction_ref: '', procedure_ids: [] })
+  const [ledgerFilter, setLedgerFilter] = useState('All')
+  const [reconTab, setReconTab] = useState('Summary')
+  const [expandedRow, setExpandedRow] = useState(null)
+  const [uploadStep, setUploadStep] = useState(0)
+  const [uploadForm, setUploadForm] = useState({ hospital_id: '', period: '' })
+
+  const load = useCallback(async () => {
+    if (!session.loggedIn) return
     try {
-      const [h, r, p, d] = await Promise.all([
-        api('/hospitals'),
-        api('/records'),
-        api('/payments'),
-        api('/discrepancies'),
+      const [d, h, p, py, r, s] = await Promise.all([
+        api('/dashboard'), api('/hospitals'), api('/procedures'),
+        api('/payouts'), api('/reconciliation'), api('/statements')
       ])
-      setHospitals(h)
-      setRecords(r)
-      setPayments(p)
-      setDiscrepancies(d)
-    } catch (err) {
-      console.error('Failed to load data:', err)
-    }
+      setDashboard(d); setHospitals(h); setProcedures(p)
+      setPayouts(py); setReconciliation(r); setStatements(s)
+    } catch (e) { console.error('Load failed:', e) }
   }, [session.loggedIn, session.user?.id])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => { load() }, [load])
 
-  const myHospitals = hospitals.filter(h => h.userId === session.user?.id || h.userId === session.user?.username)
-  const myRecords = records.filter(r => r.userId === session.user?.id || r.userId === session.user?.username)
-  const myPayments = payments.filter(p => p.userId === session.user?.id || p.userId === session.user?.username)
-  const myDiscrepancies = discrepancies.filter(d => {
-    const parentPayment = myPayments.find(p => p.hospital === d.hospital)
-    return parentPayment ? true : false
-  })
+  // ── Auth Handlers ──
 
-  const [hospitalForm, setHospitalForm] = useState({
-    name: '',
-    location: 'Bangalore',
-    serviceName: '',
-    serviceRate: '1000',
-    services: [{ name: 'Consultation', rate: 1000 }],
-  })
-
-  const [recordForm, setRecordForm] = useState({
-    hospital: '',
-    date: new Date().toISOString().split('T')[0],
-    service: '',
-    cases: '1',
-  })
-
-  const [paymentForm, setPaymentForm] = useState({
-    hospital: '',
-    date: new Date().toISOString().split('T')[0],
-    amount: '',
-    status: 'Paid',
-  })
-  const selectedHospital = myHospitals.find((hospital) => hospital.name === recordForm.hospital) || myHospitals[0] || { services: [] }
-  const selectedRate = selectedHospital?.services.find((service) => service.name === recordForm.service)?.rate || 0
-  const expectedValue = Number(recordForm.cases || 0) * selectedRate
-
-  const hospitalSummary = useMemo(() => {
-    return myHospitals.map((hospital) => {
-      const expected = myRecords
-        .filter((record) => record.hospital === hospital.name)
-        .reduce((sum, record) => sum + Number(record.expectedAmount || 0), 0)
-
-      const received = myPayments
-        .filter((payment) => payment.hospital === hospital.name)
-        .reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
-
-      return {
-        ...hospital,
-        expected,
-        received,
-        outstanding: expected - received,
-      }
-    })
-  }, [myHospitals, myPayments, myRecords])
-
-  const totalExpected = hospitalSummary.reduce((sum, item) => sum + item.expected, 0)
-  const totalReceived = hospitalSummary.reduce((sum, item) => sum + item.received, 0)
-  const totalOutstanding = totalExpected - totalReceived
-  const totalDiscrepancy = myDiscrepancies
-    .filter((item) => item.status !== 'Resolved')
-    .reduce((sum, item) => sum + Number(item.difference || 0), 0)
-
-  const followUpList = [
-    { label: 'Pending payments', value: `${myPayments.filter((item) => item.status === 'Pending').length} items`, tone: 'warning' },
-    { label: 'Partially paid', value: `${myPayments.filter((item) => item.status === 'Partially Paid').length} items`, tone: 'neutral' },
-    { label: 'Open discrepancies', value: `${myDiscrepancies.filter((item) => item.status === 'Open').length} items`, tone: 'danger' },
-  ]
-
-
-
-  const handleLogin = async (event) => {
-    event.preventDefault()
-    const username = loginForm.username.trim()
-    const password = loginForm.password.trim()
-
+  const handleLogin = async (e) => {
+    e.preventDefault()
     try {
-      const user = await api('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ username, password }),
-      })
-      const newSession = { loggedIn: true, role: user.role, user }
-      setSession(newSession)
-      if (rememberMe) {
-        localStorage.setItem('doctorSession', JSON.stringify(newSession))
-      } else {
-        localStorage.removeItem('doctorSession')
-      }
-      setActivePage('Dashboard')
+      const user = await api('/auth/login', { method: 'POST', body: JSON.stringify({ username: loginForm.username.trim(), password: loginForm.password.trim() }) })
+      const s = { loggedIn: true, user }
+      setSession(s)
+      if (rememberMe) localStorage.setItem('doctorSession', JSON.stringify(s))
       setLoginError('')
-    } catch (err) {
-      setLoginError(err.message || 'Invalid username or password.')
-    }
+    } catch (err) { setLoginError(err.message) }
   }
 
-  const handleSignup = async (event) => {
-    event.preventDefault()
-    const name = signupForm.name?.trim()
-    const email = signupForm.email?.trim()
-    const username = email
-    const password = signupForm.password.trim()
-    const confirmPassword = signupForm.confirmPassword.trim()
-
-    if (!name) return setSignupError('Full name cannot be empty.')
-    if (!email || !/^\S+@\S+\.\S+$/.test(email)) return setSignupError('Please enter a valid email address.')
-    if (!password) return setSignupError('Password cannot be empty.')
-    if (password.length < 6) return setSignupError('Password must be at least 6 characters long.')
+  const handleSignup = async (e) => {
+    e.preventDefault()
+    const { name, email, username, password, confirmPassword } = signupForm
+    if (!name?.trim()) return setSignupError('Full name is required.')
+    if (!email?.trim() || !/^\S+@\S+\.\S+$/.test(email)) return setSignupError('Valid email required.')
+    if (!password || password.length < 6) return setSignupError('Password must be at least 6 characters.')
     if (password !== confirmPassword) return setSignupError('Passwords do not match.')
-
     try {
-      await api('/auth/register', {
-        method: 'POST',
-        body: JSON.stringify({ username, email, name, password }),
-      })
+      await api('/auth/register', { method: 'POST', body: JSON.stringify({ username: username || email, email, name, password }) })
       setAuthView('success')
-    } catch (err) {
-      setSignupError(err.message || 'Registration failed.')
-    }
+    } catch (err) { setSignupError(err.message) }
   }
 
   const handleLogout = () => {
-    localStorage.removeItem('doctorSession')
     localStorage.removeItem('doctrack_session')
-    setSessionState({ loggedIn: false, role: 'doctor', user: null })
-    setHospitals([])
-    setRecords([])
-    setPayments([])
-    setDiscrepancies([])
-    setActivePage('Dashboard')
+    localStorage.removeItem('doctorSession')
+    setSessionRaw({ loggedIn: false, user: null })
+    setPage('Dashboard')
     setSidebarOpen(false)
-    setLoginForm({ username: '', password: '' })
-    setLoginError('')
   }
 
+  // ── CRUD Handlers ──
 
-
-  const addService = () => {
-    const name = hospitalForm.serviceName.trim()
-    const rate = Number(hospitalForm.serviceRate || 0)
-
-    if (!name || rate <= 0) return
-
-    const exists = hospitalForm.services.some(
-      (service) => service.name.toLowerCase() === name.toLowerCase(),
-    )
-
-    if (exists) return
-
-    setHospitalForm((current) => ({
-      ...current,
-      serviceName: '',
-      serviceRate: '1000',
-      services: [...current.services, { name, rate }],
-    }))
-  }
-
-  const handleHospitalSave = async (event) => {
-    event.preventDefault()
-    if (!hospitalForm.name.trim()) return
-
+  const saveHospital = async (e) => {
+    e.preventDefault()
     try {
-      const newHospital = await api('/hospitals', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: hospitalForm.name.trim(),
-          location: hospitalForm.location || 'Bangalore',
-          services: hospitalForm.services.length
-            ? hospitalForm.services
-            : [{ name: hospitalForm.serviceName.trim() || 'Consultation', rate: Number(hospitalForm.serviceRate || 0) }],
-        }),
-      })
-
-      setHospitals((current) => [newHospital, ...current])
-      setRecordForm((current) => ({
-        ...current,
-        hospital: newHospital.name,
-        service: newHospital.services[0]?.name || current.service,
-      }))
-      setPaymentForm((current) => ({
-        ...current,
-        hospital: newHospital.name,
-      }))
-
-      setHospitalForm({
-        name: '',
-        location: 'Bangalore',
-        serviceName: '',
-        serviceRate: '1000',
-        services: [{ name: 'Consultation', rate: 1000 }],
-      })
-      setViewState('success')
-    } catch (err) {
-      console.error('Failed to save hospital:', err)
-    }
+      const h = await api('/hospitals', { method: 'POST', body: JSON.stringify({ ...hospForm, payout_percentage: Number(hospForm.payout_percentage), fixed_fee: Number(hospForm.fixed_fee), tds_rate: Number(hospForm.tds_rate), deduction_rate: Number(hospForm.deduction_rate) }) })
+      setHospitals(prev => [h, ...prev])
+      setShowModal(null)
+      setHospForm({ name: '', location: 'Bangalore', payout_percentage: '80', fixed_fee: '0', tds_rate: '10', deduction_rate: '2', settlement_cycle: '30 days', finance_contact_name: '', finance_contact_email: '', finance_contact_phone: '' })
+      load()
+    } catch (err) { console.error(err) }
   }
 
-  const handleRecordSave = async (event) => {
-    event.preventDefault()
+  const saveProcedure = async (e) => {
+    e.preventDefault()
     try {
-      const newRecord = await api('/records', {
-        method: 'POST',
-        body: JSON.stringify({
-          hospital: recordForm.hospital,
-          date: recordForm.date,
-          service: recordForm.service,
-          cases: Number(recordForm.cases || 0),
-          expectedAmount: expectedValue,
-        }),
-      })
-      setRecords((current) => [newRecord, ...current])
-
-      setRecordForm((current) => ({
-        ...current,
-        date: new Date().toISOString().split('T')[0],
-        service: selectedHospital?.services[0]?.name || 'Consultation',
-        cases: '1',
-      }))
-      setViewState('success')
-    } catch (err) {
-      console.error('Failed to save record:', err)
-    }
+      await api('/procedures', { method: 'POST', body: JSON.stringify({ hospital_id: Number(procForm.hospital_id), date: procForm.date, patient_name: procForm.patient_name, procedure_type: procForm.procedure_type, cases: Number(procForm.cases), gross_amount: Number(procForm.gross_amount) }) })
+      setShowModal(null)
+      setModalStep(1)
+      setProcForm({ hospital_id: '', date: new Date().toISOString().split('T')[0], patient_name: '', procedure_type: 'Consultation', cases: '1', gross_amount: '' })
+      load()
+    } catch (err) { console.error(err) }
   }
 
-  const handlePaymentSave = async (event) => {
-    event.preventDefault()
+  const savePayout = async (e) => {
+    e.preventDefault()
     try {
-      const newPayment = await api('/payments', {
-        method: 'POST',
-        body: JSON.stringify({
-          hospital: paymentForm.hospital,
-          date: paymentForm.date,
-          amount: Number(paymentForm.amount || 0),
-          status: paymentForm.status,
-        }),
-      })
-      setPayments((current) => [newPayment, ...current])
-
-      setPaymentForm((current) => ({
-        ...current,
-        date: new Date().toISOString().split('T')[0],
-        amount: '',
-        status: 'Paid',
-      }))
-    } catch (err) {
-      console.error('Failed to save payment:', err)
-    }
+      await api('/payouts', { method: 'POST', body: JSON.stringify({ hospital_id: Number(payoutForm.hospital_id), date: payoutForm.date, period: payoutForm.period, actual_net: Number(payoutForm.actual_net), transaction_ref: payoutForm.transaction_ref, procedure_ids: payoutForm.procedure_ids }) })
+      setShowModal(null)
+      setPayoutForm({ hospital_id: '', date: new Date().toISOString().split('T')[0], period: '', actual_net: '', transaction_ref: '', procedure_ids: [] })
+      load()
+    } catch (err) { console.error(err) }
   }
 
-  const handleRecordDelete = async (recordId) => {
-    try {
-      await api(`/records/${recordId}`, { method: 'DELETE' })
-      setRecords((current) => current.filter((record) => record.id !== recordId))
-    } catch (err) {
-      console.error('Failed to delete record:', err)
-    }
-    setConfirmDelete(null)
+  const deleteHospital = async (id) => {
+    if (!confirm('Delete this hospital and all associated data?')) return
+    await api(`/hospitals/${id}`, { method: 'DELETE' })
+    load()
   }
 
-  const handleHospitalDelete = async (hospitalId) => {
-    const hospital = hospitals.find((item) => item.id === hospitalId)
-    if (!hospital) {
-      setConfirmDelete(null)
-      return
-    }
-
-    try {
-      await api(`/hospitals/${hospitalId}`, { method: 'DELETE' })
-      setHospitals((current) => current.filter((item) => item.id !== hospitalId))
-      setRecords((current) => current.filter((record) => record.hospital !== hospital.name))
-      setPayments((current) => current.filter((payment) => payment.hospital !== hospital.name))
-      setDiscrepancies((current) => current.filter((item) => item.hospital !== hospital.name))
-    } catch (err) {
-      console.error('Failed to delete hospital:', err)
-    }
-    setConfirmDelete(null)
+  const deleteProcedure = async (id) => {
+    if (!confirm('Delete this procedure?')) return
+    await api(`/procedures/${id}`, { method: 'DELETE' })
+    load()
   }
 
-  const updateDiscrepancyStatus = async (id, status) => {
-    try {
-      await api(`/discrepancies/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ status }),
-      })
-      setDiscrepancies((current) =>
-        current.map((item) => (item.id === id ? { ...item, status } : item)),
-      )
-    } catch (err) {
-      console.error('Failed to update discrepancy:', err)
-    }
+  const simulateUpload = async () => {
+    if (!uploadForm.hospital_id || !uploadForm.period) return
+    setUploadStep(1)
+    await api('/statements', { method: 'POST', body: JSON.stringify({ hospital_id: Number(uploadForm.hospital_id), period: uploadForm.period, filename: 'statement.pdf' }) })
+    setTimeout(() => setUploadStep(2), 1200)
+    setTimeout(() => setUploadStep(3), 2400)
+    setTimeout(() => { setUploadStep(4); load() }, 3600)
   }
 
-  const handleStatusChange = async (record, newStatus) => {
-    try {
-      await api(`/records/${record.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ status: newStatus }),
-      })
-      setRecords((current) =>
-        current.map((r) => (r.id === record.id ? { ...r, status: newStatus } : r))
-      )
+  // ── Computed ──
 
-      let amount = 0
-      if (newStatus === 'Paid' || newStatus === 'Resolved') amount = record.expectedAmount
-      if (newStatus === 'Partially Paid') amount = record.expectedAmount / 2
+  const selectedHospital = hospitals.find(h => h.id === Number(procForm.hospital_id))
+  const waterfall = selectedHospital && procForm.gross_amount ? (() => {
+    const g = Number(procForm.gross_amount)
+    const share = g * (selectedHospital.payout_percentage / 100)
+    const tds = share * (selectedHospital.tds_rate / 100)
+    const ded = share * (selectedHospital.deduction_rate / 100)
+    const net = share - tds - ded - selectedHospital.fixed_fee
+    return { gross: g, share, tds, ded, fixedFee: selectedHospital.fixed_fee, net }
+  })() : null
 
-      const existing = payments.find((p) => p.recordId === record.id)
-      if (existing) {
-        await api(`/payments/${existing.id}`, {
-          method: 'PUT',
-          body: JSON.stringify({ status: newStatus, amount }),
-        })
-        setPayments((current) =>
-          current.map((p) =>
-            p.recordId === record.id ? { ...p, status: newStatus, amount } : p
-          )
-        )
-      } else {
-        const newPayment = await api('/payments', {
-          method: 'POST',
-          body: JSON.stringify({
-            hospital: record.hospital,
-            date: record.date,
-            amount,
-            status: newStatus,
-            recordId: record.id,
-          }),
-        })
-        setPayments((current) => [newPayment, ...current])
-      }
-    } catch (err) {
-      console.error('Failed to update status:', err)
-    }
-  }
+  const filteredProcedures = ledgerFilter === 'All' ? procedures : procedures.filter(p => p.status === ledgerFilter)
 
-  const getGreeting = () => {
-    const hour = new Date().getHours()
-    if (hour >= 5 && hour < 12) return 'Good morning'
-    if (hour >= 12 && hour < 17) return 'Good afternoon'
+  // ── Greeting ──
+  const greeting = (() => {
+    const h = new Date().getHours()
+    if (h >= 5 && h < 12) return 'Good morning'
+    if (h >= 12 && h < 17) return 'Good afternoon'
     return 'Good evening'
-  }
+  })()
+
+  // ═══════════════════════════════════════
+  // RENDER: Dashboard
+  // ═══════════════════════════════════════
 
   const renderDashboard = () => {
-    if (myRecords.length === 0 && myHospitals.length === 0 && myPayments.length === 0) {
-      return (
-        <section className="space-y-6 animate-fade-in">
-          <header className="flex items-end justify-between">
-            <div>
-              <p className="text-sm text-neutral-500">Revenue overview</p>
-              <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-                {getGreeting()}{session.user ? `, ${session.user.name?.split(' ')[0] || session.user.username}` : ''}
-              </h1>
-            </div>
-          </header>
+    const d = dashboard
+    if (!d) return <div className="empty-state"><p>Loading...</p></div>
 
-          <div className="card bg-white p-12 text-center" style={{ marginTop: '2rem' }}>
-            <FileText size={48} className="text-neutral-300" style={{ margin: '0 auto', marginBottom: '1rem' }} />
-            <h2 className="text-xl font-semibold mb-2">No transactions yet</h2>
-            <p className="text-neutral-500 mb-6">Start by creating your first record to track your revenue.</p>
-            <button className="primary-btn inline-flex items-center gap-2" style={{ width: 'auto' }} onClick={() => { setActivePage('My Records'); setViewState('form') }}>
-              <Plus size={18} /> Start New Record
-            </button>
-          </div>
-        </section>
+    if (d.procedureCount === 0 && d.hospitalCount === 0) {
+      return (
+        <div className="animate-in">
+          <div className="page-header"><div><h1>{greeting}, {session.user?.name?.split(' ')[0]}</h1><p className="page-subtitle">Revenue overview</p></div></div>
+          <div className="card"><div className="empty-state">
+            <FileText size={56} className="empty-state-icon" />
+            <h3>No data yet</h3>
+            <p>Start by adding a hospital, then log your first procedure.</p>
+            <div className="flex gap-3 justify-center">
+              <button className="btn btn-outline" onClick={() => setShowModal('hospital')}><Plus size={16} /> Add Hospital</button>
+              <button className="btn btn-primary" onClick={() => setShowModal('procedure')}><Plus size={16} /> Log Procedure</button>
+            </div>
+          </div></div>
+        </div>
       )
     }
 
     return (
-      <section className="space-y-6 animate-fade-in">
-        <header className="flex items-end justify-between">
-          <div>
-            <p className="text-sm text-neutral-500">Revenue overview</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-              {getGreeting()}{session.user ? `, ${session.user.name?.split(' ')[0] || session.user.username}` : ''}
-            </h1>
-          </div>
-          {session.role === 'doctor' && (
-            <button className="primary-btn inline-flex items-center gap-2" onClick={() => { setActivePage('My Records'); setViewState('form') }}>
-              <Plus size={18} /> Start New Record
-            </button>
+      <div className="animate-in">
+        <div className="page-header">
+          <div><h1>{greeting}, {session.user?.name?.split(' ')[0]}</h1><p className="page-subtitle">Revenue overview</p></div>
+          <button className="btn btn-primary" onClick={() => setShowModal('procedure')}><Plus size={16} /> Log Procedure</button>
+        </div>
+
+        <div className="stats-grid">
+          <div className="stat-tile blue"><span className="stat-label">Total Billed</span><span className="stat-value">{formatMoney(d.totalBilled)}</span><span className="stat-sub">{d.procedureCount} procedures</span></div>
+          <div className="stat-tile green"><span className="stat-label">Expected Revenue</span><span className="stat-value green">{formatMoney(d.expectedRevenue)}</span><span className="stat-sub">After TDS & deductions</span></div>
+          <div className="stat-tile amber"><span className="stat-label">Received</span><span className="stat-value">{formatMoney(d.totalReceived)}</span><span className="stat-sub">{d.hospitalCount} hospitals</span></div>
+          <div className="stat-tile red"><span className="stat-label">Pending</span><span className="stat-value amber">{formatMoney(d.totalPending)}</span><span className="stat-sub">Awaiting settlement</span></div>
+        </div>
+
+        <div className="collection-bar-wrap">
+          <div className="collection-bar-header"><h3>Collection Rate</h3><span className="collection-rate-value">{formatPct(d.collectionRate)}</span></div>
+          <div className="collection-bar-track"><div className="collection-bar-fill" style={{ width: `${Math.min(d.collectionRate, 100)}%` }} /></div>
+        </div>
+
+        {d.alerts.length > 0 && (
+          <div className="card mb-6"><div className="card-header"><h3>Reconciliation Alerts</h3></div><div className="card-body">
+            <div className="alert-list">
+              {d.alerts.map((a, i) => (
+                <div key={i} className={`alert-item ${a.severity === 'error' ? 'red' : 'amber'}`}>
+                  <AlertTriangle size={16} /><span>{a.message}</span>
+                </div>
+              ))}
+            </div>
+          </div></div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '16px' }}>
+          <div className="card"><div className="card-header"><h3>Recent Procedures</h3></div><div className="card-body compact"><div className="table-wrap"><table className="data-table"><thead><tr><th>Hospital</th><th>Date</th><th>Type</th><th>Gross</th><th>Net Expected</th><th>Status</th></tr></thead><tbody>
+            {(d.recentProcedures || []).map(p => (
+              <tr key={p.id}><td>{p.hospital_name}</td><td>{p.date}</td><td>{p.procedure_type}</td><td className="amount">{formatMoney(p.gross_amount)}</td><td className="amount">{formatMoney(p.net_expected)}</td><td><span className={`badge ${p.status === 'Paid' ? 'green' : p.status === 'Matched' ? 'blue' : p.status === 'Discrepancy' ? 'red' : 'amber'}`}>{p.status}</span></td></tr>
+            ))}
+          </tbody></table></div></div></div>
+
+          <div className="card"><div className="card-header"><h3>Hospital Summary</h3></div><div className="card-body">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {(d.hospitalSummary || []).map(h => (
+                <div key={h.id} className="hospital-strip-item" style={{ border: 'none', padding: '12px 0', borderBottom: '1px solid var(--border-light)' }}>
+                  <div className="hospital-strip-name">{h.name}</div>
+                  <div className="hospital-strip-stats">
+                    <div className="flex justify-between"><span>Billed</span><span className="val">{formatMoney(h.total_billed)}</span></div>
+                    <div className="flex justify-between"><span>Received</span><span className="val text-green">{formatMoney(h.received)}</span></div>
+                    <div className="flex justify-between"><span>Pending</span><span className="val text-amber">{formatMoney(h.pending)}</span></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div></div>
+        </div>
+      </div>
+    )
+  }
+
+  // ═══════════════════════════════════════
+  // RENDER: Ledger
+  // ═══════════════════════════════════════
+
+  const renderLedger = () => (
+    <div className="animate-in">
+      <div className="page-header">
+        <div><h1>Ledger</h1><p className="page-subtitle">All procedure records with payment status</p></div>
+        <button className="btn btn-primary" onClick={() => setShowModal('procedure')}><Plus size={16} /> Log Procedure</button>
+      </div>
+
+      <div className="filter-bar">
+        {['All', 'Pending', 'Paid', 'Matched', 'Discrepancy'].map(f => (
+          <button key={f} className={`filter-chip ${ledgerFilter === f ? 'active' : ''}`} onClick={() => setLedgerFilter(f)}>
+            {f}{f !== 'All' ? ` (${procedures.filter(p => p.status === f).length})` : ` (${procedures.length})`}
+          </button>
+        ))}
+      </div>
+
+      <div className="card"><div className="card-body compact"><div className="table-wrap"><table className="data-table"><thead><tr>
+        <th style={{width:32}}></th><th>Hospital</th><th>Date</th><th>Procedure</th><th>Cases</th><th>Gross</th><th>Net Expected</th><th>Status</th><th>Actions</th>
+      </tr></thead><tbody>
+        {filteredProcedures.map(p => (<>
+          <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => setExpandedRow(expandedRow === p.id ? null : p.id)}>
+            <td>{expandedRow === p.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</td>
+            <td className="font-semibold">{p.hospital_name}</td><td>{p.date}</td><td>{p.procedure_type}</td><td>{p.cases}</td>
+            <td className="amount">{formatMoney(p.gross_amount)}</td><td className="amount">{formatMoney(p.net_expected)}</td>
+            <td><span className={`badge ${p.status === 'Paid' ? 'green' : p.status === 'Matched' ? 'blue' : p.status === 'Discrepancy' ? 'red' : 'amber'}`}>{p.status}</span></td>
+            <td><button className="btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); deleteProcedure(p.id) }}><Trash2 size={14} /></button></td>
+          </tr>
+          {expandedRow === p.id && (
+            <tr key={`${p.id}-detail`}><td colSpan={9}><div className="row-detail"><div className="row-detail-grid">
+              <div className="row-detail-item"><label>Doctor Share</label><span>{formatMoney(p.doctor_share)}</span></div>
+              <div className="row-detail-item"><label>TDS</label><span className="text-red">−{formatMoney(p.tds_amount)}</span></div>
+              <div className="row-detail-item"><label>Deductions</label><span className="text-red">−{formatMoney(p.deduction_amount)}</span></div>
+              <div className="row-detail-item"><label>Net Expected</label><span className="text-green font-bold">{formatMoney(p.net_expected)}</span></div>
+              {p.patient_name && <div className="row-detail-item"><label>Patient</label><span>{p.patient_name}</span></div>}
+              {p.notes && <div className="row-detail-item"><label>Notes</label><span>{p.notes}</span></div>}
+            </div></div></td></tr>
           )}
-        </header>
-
-        <div className="grid gap-4 lg-grid-cols-12 mt-6">
-          <div className="card lg-col-7 bg-white p-6">
-            <p className="text-sm text-neutral-500">Total expected revenue</p>
-            <p className="mt-3 text-4xl font-semibold tracking-tight">
-              {formatMoney(totalExpected)}
-            </p>
-            <p className="mt-2 text-sm text-neutral-500">
-              Across {myHospitals.length} active hospitals
-            </p>
-          </div>
-
-          <div className="card lg-col-5 bg-white p-6">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-neutral-500">Outstanding revenue</p>
-                <p className="mt-3 text-3xl font-semibold tracking-tight text-warning">
-                  {formatMoney(totalOutstanding)}
-                </p>
-                <p className="mt-2 text-sm text-neutral-500">
-                  Requires follow-up
-                </p>
-              </div>
-              <ArrowUpRight size={20} className="text-neutral-400" />
-            </div>
-            <button className="mt-6 text-sm font-medium text-orange-600 hover-text-orange-700 inline-flex items-center" style={{ background: 'none', border: 'none', padding: 0 }} onClick={() => setActivePage('My Payments')}>
-              View payments &rarr;
-            </button>
-          </div>
-
-          <div className="card lg-col-8 bg-white p-6">
-            <h3 className="text-sm font-medium mb-4">Recent Services</h3>
-            <div className="table-wrap">
-              <table className="clean-table">
-                <thead>
-                  <tr><th>Hospital</th><th>Date</th><th>Service</th><th>Expected</th></tr>
-                </thead>
-                <tbody>
-                  {myRecords.slice(0, 4).map((record) => (
-                    <tr key={record.id}>
-                      <td>{record.hospital}</td>
-                      <td>{record.date}</td>
-                      <td>{record.service}</td>
-                      <td>{formatMoney(record.expectedAmount)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="card lg-col-4 bg-white p-6">
-            <h3 className="text-sm font-medium mb-4">At a Glance</h3>
-            <div className="flex flex-col gap-4">
-              <div className="flex justify-between items-center border-b pb-3">
-                <span className="text-sm text-neutral-500">Total Received</span>
-                <strong className="text-success">{formatMoney(totalReceived)}</strong>
-              </div>
-              <div className="flex justify-between items-center border-b pb-3">
-                <span className="text-sm text-neutral-500">Deductions</span>
-                <strong className="text-danger">{formatMoney(totalDiscrepancy)}</strong>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-neutral-500">Active Cases</span>
-                <strong>{myRecords.length}</strong>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-    )
-  }
-
-  const renderHospitals = () => {
-    if (viewState === 'form') {
-      return (
-        <>
-          <div className="page-header"><div><p className="eyebrow">Hospitals</p><h1>Add Hospital</h1></div></div>
-          <div className="panel form-panel">
-            <form className="grid-form" onSubmit={handleHospitalSave}>
-              <label className="field"><span className="field-label">Hospital Name</span><input type="text" value={hospitalForm.name} onChange={(event) => setHospitalForm({ ...hospitalForm, name: event.target.value })} placeholder="Hospital name" /></label>
-              <label className="field"><span className="field-label">Location</span><input type="text" value={hospitalForm.location} onChange={(event) => setHospitalForm({ ...hospitalForm, location: event.target.value })} placeholder="Bangalore" /></label>
-              <label className="field"><span className="field-label">Service Name</span><input type="text" value={hospitalForm.serviceName} onChange={(event) => setHospitalForm({ ...hospitalForm, serviceName: event.target.value })} placeholder="Consultation" /></label>
-              <label className="field"><span className="field-label">Service Rate (₹)</span><input type="number" min="0" value={hospitalForm.serviceRate} onChange={(event) => setHospitalForm({ ...hospitalForm, serviceRate: event.target.value })} placeholder="1000" /></label>
-              <div className="field"><span className="field-label">&nbsp;</span><button type="button" className="secondary-btn" onClick={addService}>Add service</button></div>
-
-              <div className="field full-span form-actions" style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
-                <button type="button" className="secondary-btn" onClick={() => setViewState('list')}>← Back</button>
-                <button type="submit" className="primary-btn">Save Hospital & Continue →</button>
-              </div>
-            </form>
-            <div className="service-list">{hospitalForm.services.map((service) => <span key={`${service.name}-${service.rate}`} className="service-pill">{service.name} · {formatMoney(service.rate)}</span>)}</div>
-          </div>
-        </>
-      )
-    }
-
-    if (viewState === 'success') {
-      return (
-        <div className="panel success-panel" style={{ textAlign: 'center', padding: '40px 20px' }}>
-          <h3 style={{ color: 'var(--success)', fontSize: '1.5rem', marginBottom: '24px' }}>✅ Hospital Added Successfully</h3>
-          <div className="form-actions" style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
-             <button type="button" className="secondary-btn" onClick={() => setViewState('list')}>View Hospitals</button>
-             <button type="button" className="secondary-btn" onClick={() => setViewState('form')}>+ Add Another</button>
-             <button type="button" className="primary-btn" onClick={() => { setActivePage('My Records'); setViewState('form') }}>Next: Add Visit Record →</button>
-          </div>
-        </div>
-      )
-    }
-
-    return (
-      <>
-        <div className="page-header">
-          <div><p className="eyebrow">Hospitals</p><h1>My Hospitals</h1></div>
-          {session.role === 'doctor' && <button className="primary-btn" onClick={() => setViewState('form')}>+ Add Hospital</button>}
-        </div>
-        <div className="panel">
-          <div className="table-wrap"><table><thead><tr><th>Hospital</th><th>Location</th><th>Services</th><th>Action</th></tr></thead><tbody>{myHospitals.map((hospital) => <tr key={hospital.id}><td>{hospital.name}</td><td>{hospital.location}</td><td><div className="service-list compact-list">{hospital.services.map((service) => <span key={`${hospital.id}-${service.name}`} className="service-pill compact-pill">{service.name}: {formatMoney(service.rate)}</span>)}</div></td><td><button type="button" className="danger-text-btn" onClick={() => setConfirmDelete({ type: 'hospital', id: hospital.id, title: 'Delete this hospital?', message: 'Deleting the hospital may also affect its associated records.' })}>Delete</button></td></tr>)}</tbody></table></div>
-        </div>
-      </>
-    )
-  }
-
-  const renderRecords = () => {
-    if (viewState === 'form') {
-      return (
-        <>
-          <div className="page-header"><div><p className="eyebrow">Records</p><h1>Add Visit Record</h1></div></div>
-          <div className="panel form-panel">
-            <form className="grid-form" onSubmit={handleRecordSave}>
-              <label className="field"><span className="field-label">Hospital</span><select value={recordForm.hospital} onChange={(event) => { const nextHospital = hospitals.find((hospital) => hospital.name === event.target.value); setRecordForm({ ...recordForm, hospital: event.target.value, service: nextHospital?.services[0]?.name || 'Consultation' }) }}>
-                {hospitals.map((hospital) => <option key={hospital.id} value={hospital.name}>{hospital.name}</option>)}
-              </select></label>
-              <label className="field"><span className="field-label">Date</span><input type="date" value={recordForm.date} onChange={(event) => setRecordForm({ ...recordForm, date: event.target.value })} /></label>
-              <label className="field"><span className="field-label">Service</span><select value={recordForm.service} onChange={(event) => setRecordForm({ ...recordForm, service: event.target.value })}>{(selectedHospital?.services || []).map((service) => <option key={service.name} value={service.name}>{service.name}</option>)}</select></label>
-              <label className="field"><span className="field-label">Number of Cases</span><input type="number" min="0" value={recordForm.cases} onChange={(event) => setRecordForm({ ...recordForm, cases: event.target.value })} /></label>
-              <label className="field"><span className="field-label">Rate per Case</span><input type="text" value={formatMoney(selectedRate)} readOnly /></label>
-              <label className="field"><span className="field-label">Expected Amount</span><input type="text" value={formatMoney(expectedValue)} readOnly /></label>
-              <div className="field full-span form-actions" style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
-                <button type="button" className="secondary-btn" onClick={() => setViewState('list')}>← Back</button>
-                <button type="submit" className="primary-btn">Save Record & Continue →</button>
-              </div>
-            </form>
-          </div>
-        </>
-      )
-    }
-
-    if (viewState === 'success') {
-      return (
-        <div className="panel success-panel" style={{ textAlign: 'center', padding: '40px 20px' }}>
-          <h3 style={{ color: 'var(--success)', fontSize: '1.5rem', margin: '0 0 24px' }}>✅ Visit Record Logged Successfully</h3>
-          <div className="form-actions" style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
-             <button type="button" className="secondary-btn" onClick={() => setViewState('list')}>View Records</button>
-             <button type="button" className="secondary-btn" onClick={() => setViewState('form')}>+ Log Another</button>
-             <button type="button" className="primary-btn" onClick={() => { setActivePage('My Payments'); setViewState('list') }}>Next: Track Payments →</button>
-          </div>
-        </div>
-      )
-    }
-
-    return (
-      <>
-        <div className="page-header">
-          <div><p className="eyebrow">Records</p><h1>My Records</h1></div>
-          {session.role === 'doctor' && <button className="primary-btn" onClick={() => setViewState('form')}>+ Start New Record</button>}
-        </div>
-        <div className="panel"><div className="table-wrap"><table><thead><tr><th>Hospital</th><th>Date</th><th>Service</th><th>Cases</th><th>Expected</th><th>Action</th></tr></thead><tbody>{myRecords.map((record) => <tr key={record.id}><td>{record.hospital}</td><td>{record.date}</td><td>{record.service}</td><td>{record.cases}</td><td>{formatMoney(record.expectedAmount)}</td><td><button type="button" className="danger-text-btn" onClick={() => setConfirmDelete({ type: 'record', id: record.id, title: 'Delete this record?', message: 'This action cannot be undone.' })}>Delete</button></td></tr>)}</tbody></table></div></div>
-      </>
-    )
-  }
-
-  const renderPayments = () => {
-    const totalReceived = myPayments.reduce((sum, p) => sum + Number(p.amount), 0)
-    const totalRevenue = myRecords.reduce((sum, r) => sum + Number(r.expectedAmount), 0)
-    const totalPending = totalRevenue - totalReceived
-    const numPaid = myPayments.filter(p => p.status === 'Paid' || p.status === 'Resolved').length
-    const numPending = myRecords.length - numPaid
-
-    return (
-    <section className="animate-fade-in">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Payment Overview</h1>
-          <p className="text-sm text-neutral-500 mt-1">Track received and outstanding payments</p>
-        </div>
-        <button className="primary-btn" onClick={() => { setActivePage('My Records'); setViewState('form') }}>
-          + Start New Record
-        </button>
-      </div>
-
-      <div className="metrics-bar" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-        <div className="metric-item">
-          <span className="metric-label">Total Received</span>
-          <span className="metric-value success">{formatMoney(totalReceived)}</span>
-        </div>
-        <div className="metric-item">
-          <span className="metric-label">Total Pending</span>
-          <span className="metric-value warning">{formatMoney(totalPending)}</span>
-        </div>
-        <div className="metric-item">
-          <span className="metric-label">Total Revenue</span>
-          <span className="metric-value">{formatMoney(totalRevenue)}</span>
-        </div>
-        <div className="metric-item">
-          <span className="metric-label">Paid Trans.</span>
-          <span className="metric-value">{numPaid}</span>
-        </div>
-        <div className="metric-item">
-          <span className="metric-label">Pending Trans.</span>
-          <span className="metric-value">{numPending}</span>
-        </div>
-      </div>
-
-      <div className="card bg-white">
-        <div className="p-4 border-b">
-          <h3 className="text-sm font-medium">Transaction Table</h3>
-        </div>
-        <div className="table-wrap">
-          <table className="clean-table">
-            <thead>
-              <tr>
-                <th>Hospital</th>
-                <th>Visit Date</th>
-                <th>Amount</th>
-                <th>Status</th>
-                <th>Payment Date</th>
-                <th>Transaction Ref</th>
-              </tr>
-            </thead>
-            <tbody>
-              {myRecords.map((record) => {
-                const currentStatus = record.status || 'Active'
-                const relatedPayment = myPayments.find(p => p.recordId === record.id)
-                return (
-                  <tr key={record.id}>
-                    <td>{record.hospital}</td>
-                    <td>{record.date}</td>
-                    <td>{formatMoney(record.expectedAmount)}</td>
-                    <td>
-                      <select
-                        className="status-dropdown"
-                        value={currentStatus}
-                        onChange={(event) => handleStatusChange(record, event.target.value)}
-                      >
-                        <option value="Active">Active</option>
-                        <option value="Payment Pending">Payment Pending</option>
-                        <option value="Partially Paid">Partially Paid</option>
-                        <option value="Paid">Paid</option>
-                        <option value="Under Review">Under Review</option>
-                        <option value="Resolved">Resolved</option>
-                      </select>
-                    </td>
-                    <td>{relatedPayment ? relatedPayment.date : '-'}</td>
-                    <td>{relatedPayment ? `TRX-${String(relatedPayment.id).slice(-6)}` : '-'}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-  )}
-
-  const renderDiscrepancies = () => (
-    <>
-      <div className="page-header"><div><p className="eyebrow">Follow-up</p><h1>Discrepancies</h1></div></div>
-      <div className="panel"><div className="table-wrap"><table><thead><tr><th>Hospital</th><th>Expected</th><th>Received</th><th>Difference</th><th>Status</th><th>Action</th></tr></thead><tbody>{myDiscrepancies.map((item) => <tr key={item.id}><td>{item.hospital}</td><td>{formatMoney(item.expectedAmount)}</td><td>{formatMoney(item.receivedAmount)}</td><td>{formatMoney(item.difference)}</td><td><span className={`status-badge ${item.status.toLowerCase()}`}>{item.status}</span></td><td><select value={item.status} onChange={(event) => updateDiscrepancyStatus(item.id, event.target.value)}><option value="Open">Open</option><option value="Resolved">Resolved</option></select></td></tr>)}</tbody></table></div></div>
-
-      <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-        <button type="button" className="secondary-btn" onClick={() => setActivePage('My Payments')}>← Back to Payments</button>
-        <button type="button" className="primary-btn" onClick={() => setActivePage('Dashboard')}>Done / Back to Dashboard</button>
-      </div>
-    </>
+        </>))}
+      </tbody></table></div></div></div>
+    </div>
   )
-  const renderReports = () => {
-    const hospitalMap = {}
-    myRecords.forEach(r => {
-      if(!hospitalMap[r.hospital]) hospitalMap[r.hospital] = { revenue: 0, visits: 0, cases: 0 }
-      hospitalMap[r.hospital].revenue += Number(r.expectedAmount)
-      hospitalMap[r.hospital].visits += 1
-      hospitalMap[r.hospital].cases += Number(r.cases || 1)
-    })
+
+  // ═══════════════════════════════════════
+  // RENDER: Hospital Profiles
+  // ═══════════════════════════════════════
+
+  const renderHospitals = () => (
+    <div className="animate-in">
+      <div className="page-header">
+        <div><h1>Hospital Profiles</h1><p className="page-subtitle">Payout rules, contacts & outstanding balances</p></div>
+        <button className="btn btn-primary" onClick={() => setShowModal('hospital')}><Plus size={16} /> Add Hospital</button>
+      </div>
+
+      {hospitals.length === 0 ? (
+        <div className="card"><div className="empty-state">
+          <Building2 size={56} className="empty-state-icon" />
+          <h3>No hospitals yet</h3>
+          <p>Add your first hospital to start tracking revenue.</p>
+          <button className="btn btn-primary" onClick={() => setShowModal('hospital')}><Plus size={16} /> Add Hospital</button>
+        </div></div>
+      ) : (
+        <div className="hospital-grid">
+          {hospitals.map(h => {
+            const hSummary = dashboard?.hospitalSummary?.find(s => s.id === h.id)
+            return (
+              <div key={h.id} className="hospital-card">
+                <div className="hospital-card-header">
+                  <div><h3>{h.name}</h3><span className="location">{h.location}</span></div>
+                  <button className="btn-ghost btn-sm text-red" onClick={() => deleteHospital(h.id)}><Trash2 size={14} /></button>
+                </div>
+                <div className="hospital-card-body">
+                  <div className="payout-rules">
+                    <div className="payout-rule"><div className="payout-rule-label">Revenue Share</div><div className="payout-rule-value">{h.payout_percentage}%</div></div>
+                    <div className="payout-rule"><div className="payout-rule-label">TDS Rate</div><div className="payout-rule-value">{h.tds_rate}%</div></div>
+                    <div className="payout-rule"><div className="payout-rule-label">Deductions</div><div className="payout-rule-value">{h.deduction_rate}%</div></div>
+                    <div className="payout-rule"><div className="payout-rule-label">Fixed Fee</div><div className="payout-rule-value">{formatMoney(h.fixed_fee)}</div></div>
+                    <div className="payout-rule"><div className="payout-rule-label">Settlement</div><div className="payout-rule-value">{h.settlement_cycle}</div></div>
+                  </div>
+                  {h.finance_contact_name && (
+                    <div className="finance-contact">
+                      <strong>{h.finance_contact_name}</strong>
+                      {h.finance_contact_email && <div>{h.finance_contact_email}</div>}
+                      {h.finance_contact_phone && <div>{h.finance_contact_phone}</div>}
+                    </div>
+                  )}
+                </div>
+                <div className="hospital-card-footer">
+                  <span className="outstanding-label">Outstanding</span>
+                  <span className={`outstanding-value ${(hSummary?.pending || 0) > 0 ? 'positive' : ''}`}>{formatMoney(hSummary?.pending || 0)}</span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+
+  // ═══════════════════════════════════════
+  // RENDER: Payout Details
+  // ═══════════════════════════════════════
+
+  const renderPayouts = () => (
+    <div className="animate-in">
+      <div className="page-header">
+        <div><h1>Payout Details</h1><p className="page-subtitle">Waterfall view of each hospital payment</p></div>
+        <button className="btn btn-primary" onClick={() => setShowModal('payout')}><Plus size={16} /> Record Payout</button>
+      </div>
+
+      {payouts.length === 0 ? (
+        <div className="card"><div className="empty-state">
+          <Receipt size={56} className="empty-state-icon" />
+          <h3>No payouts recorded</h3>
+          <p>Record a payout when a hospital settles your dues.</p>
+        </div></div>
+      ) : (
+        <div style={{ display: 'grid', gap: '16px' }}>
+          {payouts.map(py => (
+            <div key={py.id} className="card">
+              <div className="card-header">
+                <div>
+                  <h3>{py.hospital_name}</h3>
+                  <span className="text-sm text-muted">{py.date}{py.period ? ` · Period: ${py.period}` : ''}{py.transaction_ref ? ` · Ref: ${py.transaction_ref}` : ''}</span>
+                </div>
+                <span className={`badge ${py.status === 'Paid' ? 'green' : 'amber'}`}>{py.status}</span>
+              </div>
+              <div className="card-body">
+                <div className="waterfall">
+                  <div className="waterfall-row gross"><span className="waterfall-label">Gross Amount</span><span className="waterfall-amount">{formatMoney(py.gross_amount)}</span></div>
+                  <div className="waterfall-row deduction"><span className="waterfall-label">TDS</span><span className="waterfall-amount">{formatMoney(py.tds)}</span></div>
+                  <div className="waterfall-row deduction"><span className="waterfall-label">Deductions</span><span className="waterfall-amount">{formatMoney(py.deductions)}</span></div>
+                  <div className="waterfall-row net"><span className="waterfall-label">Expected Net</span><span className="waterfall-amount">{formatMoney(py.expected_net)}</span></div>
+                  <div className="waterfall-row actual"><span className="waterfall-label">Actual Received</span><span className="waterfall-amount">{formatMoney(py.actual_net)}</span></div>
+                  {py.shortfall > 0 && <div className="waterfall-row shortfall"><span className="waterfall-label"><AlertTriangle size={14} /> Shortfall</span><span className="waterfall-amount">{formatMoney(py.shortfall)}</span></div>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
+  // ═══════════════════════════════════════
+  // RENDER: Upload Statement
+  // ═══════════════════════════════════════
+
+  const renderUpload = () => (
+    <div className="animate-in">
+      <div className="page-header"><div><h1>Upload Statement</h1><p className="page-subtitle">Upload hospital statements for automated matching</p></div></div>
+
+      <div className="card mb-6"><div className="card-body">
+        <div className="form-grid mb-4">
+          <div className="form-field">
+            <label className="form-label">Hospital</label>
+            <select className="form-select" value={uploadForm.hospital_id} onChange={e => setUploadForm({...uploadForm, hospital_id: e.target.value})}>
+              <option value="">Select hospital...</option>
+              {hospitals.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+            </select>
+          </div>
+          <div className="form-field">
+            <label className="form-label">Period</label>
+            <input className="form-input" type="month" value={uploadForm.period} onChange={e => setUploadForm({...uploadForm, period: e.target.value})} />
+          </div>
+        </div>
+
+        {uploadStep === 0 ? (
+          <div className="upload-zone" onClick={simulateUpload}>
+            <Upload size={48} className="upload-zone-icon" />
+            <p className="font-semibold mb-2">Click to upload statement</p>
+            <p className="text-sm text-muted">PDF, Excel or CSV · Select hospital & period first</p>
+          </div>
+        ) : (
+          <div className="progress-steps">
+            {['Upload', 'OCR Extract', 'Match', 'Complete'].map((label, i) => (
+              <div key={label} className={`progress-step ${uploadStep > i + 1 ? 'done' : uploadStep === i + 1 ? 'active' : ''}`}>
+                <div className="step-dot">{uploadStep > i + 1 ? <CheckCircle2 size={16} /> : i + 1}</div>
+                <span className="step-label">{label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div></div>
+
+      {statements.length > 0 && (
+        <div className="card"><div className="card-header"><h3>Previous Uploads</h3></div><div className="card-body compact"><div className="table-wrap"><table className="data-table"><thead><tr>
+          <th>Hospital</th><th>Period</th><th>Status</th><th>Matched</th><th>Discrepancies</th><th>Unmatched</th>
+        </tr></thead><tbody>
+          {statements.map(s => (
+            <tr key={s.id}><td>{s.hospital_name}</td><td>{s.period}</td>
+              <td><span className={`badge ${s.status === 'Complete' ? 'green' : s.status === 'Processing' ? 'blue' : 'amber'}`}>{s.status}</span></td>
+              <td>{s.matched_count}</td><td>{s.discrepancy_count}</td><td>{s.unmatched_count}</td></tr>
+          ))}
+        </tbody></table></div></div></div>
+      )}
+    </div>
+  )
+
+  // ═══════════════════════════════════════
+  // RENDER: Reconciliation
+  // ═══════════════════════════════════════
+
+  const renderReconciliation = () => {
+    const r = reconciliation
+    if (!r) return <div className="empty-state"><p>Loading...</p></div>
+    const total = (r.summary.matched || 0) + (r.summary.discrepancy || 0) + (r.summary.pending || 0) + (r.summary.unmatched || 0)
+    const pctOf = (v) => total > 0 ? (v / total * 100) : 0
 
     return (
-      <section className="animate-fade-in">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Reports</h1>
-            <p className="text-sm text-neutral-500 mt-1">Summary of your revenue and visits</p>
-          </div>
+      <div className="animate-in">
+        <div className="page-header"><div><h1>Reconciliation</h1><p className="page-subtitle">Match procedures against hospital payouts</p></div></div>
+
+        <div className="tabs">
+          {['Summary', 'Matched', 'Discrepancy', 'Unmatched'].map(t => (
+            <button key={t} className={`tab ${reconTab === t ? 'active' : ''}`} onClick={() => setReconTab(t)}>
+              {t}<span className="tab-count">{t === 'Summary' ? total : t === 'Matched' ? r.summary.matched : t === 'Discrepancy' ? r.summary.discrepancy : (r.summary.pending + r.summary.unmatched)}</span>
+            </button>
+          ))}
         </div>
 
-        <div className="card bg-white" style={{ marginBottom: '24px' }}>
-          <div className="p-4 border-b"><h3 className="text-sm font-medium">Hospital-wise Summary</h3></div>
-          <div className="table-wrap">
-            <table className="clean-table">
-              <thead><tr><th>Hospital</th><th>Revenue</th><th>Visits</th><th>Cases</th></tr></thead>
-              <tbody>
-                {Object.keys(hospitalMap).map(h => (
-                  <tr key={h}><td>{h}</td><td>{formatMoney(hospitalMap[h].revenue)}</td><td>{hospitalMap[h].visits}</td><td>{hospitalMap[h].cases}</td></tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-    )
-  }
+        {reconTab === 'Summary' && (
+          <div style={{ display: 'grid', gap: '16px' }}>
+            <div className="card"><div className="card-body">
+              <h3 className="font-semibold mb-4">Match Rate</h3>
+              <div className="match-bar-container">
+                <div className="match-bar-segment matched" style={{ width: `${pctOf(r.summary.matched)}%` }} />
+                <div className="match-bar-segment pending" style={{ width: `${pctOf(r.summary.pending)}%` }} />
+                <div className="match-bar-segment discrepancy" style={{ width: `${pctOf(r.summary.discrepancy)}%` }} />
+                <div className="match-bar-segment unmatched" style={{ width: `${pctOf(r.summary.unmatched)}%` }} />
+              </div>
+              <div className="match-legend">
+                <div className="match-legend-item"><div className="match-legend-dot matched" /><span>Matched ({r.summary.matched})</span></div>
+                <div className="match-legend-item"><div className="match-legend-dot pending" /><span>Pending ({r.summary.pending})</span></div>
+                <div className="match-legend-item"><div className="match-legend-dot discrepancy" /><span>Discrepancy ({r.summary.discrepancy})</span></div>
+                <div className="match-legend-item"><div className="match-legend-dot unmatched" /><span>Unmatched ({r.summary.unmatched})</span></div>
+              </div>
+            </div></div>
 
-  const renderSettings = () => {
-    return (
-      <section className="animate-fade-in">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-            <p className="text-sm text-neutral-500 mt-1">Manage your account preferences</p>
-          </div>
-        </div>
-
-        <div className="card bg-white p-6 max-w-2xl">
-          <div className="flex items-center gap-4 mb-8 pb-8 border-b border-neutral-200">
-            <div className="avatar"><User size={32} /></div>
-            <div>
-              <h3 className="text-lg font-medium">{session.user?.name || session.user?.username}</h3>
-              <p className="text-neutral-500">Role: {session.role}</p>
+            <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+              <div className="stat-tile green"><span className="stat-label">Match Rate</span><span className="stat-value green">{formatPct(r.matchRate)}</span></div>
+              <div className="stat-tile red"><span className="stat-label">Total TDS</span><span className="stat-value">{formatMoney(r.totalTds)}</span></div>
+              <div className="stat-tile amber"><span className="stat-label">Total Deductions</span><span className="stat-value">{formatMoney(r.totalDeductions)}</span></div>
             </div>
           </div>
+        )}
 
-          <h3 className="text-md font-medium mb-4">Account Actions</h3>
-          <div className="flex flex-col gap-4">
-            <button className="secondary-btn w-fit">Change Password</button>
-            <button className="danger-btn w-fit" onClick={handleLogout}>Logout</button>
-          </div>
-        </div>
-      </section>
+        {reconTab !== 'Summary' && (() => {
+          const list = reconTab === 'Matched' ? r.matched : reconTab === 'Discrepancy' ? r.discrepancies : r.unmatched
+          return (
+            <div className="card"><div className="card-body compact"><div className="table-wrap"><table className="data-table"><thead><tr>
+              <th>Hospital</th><th>Date</th><th>Procedure</th><th>Gross</th><th>Net Expected</th><th>Status</th>
+            </tr></thead><tbody>
+              {list.map(p => (
+                <tr key={p.id}><td>{p.hospital_name}</td><td>{p.date}</td><td>{p.procedure_type}</td>
+                  <td className="amount">{formatMoney(p.gross_amount)}</td><td className="amount">{formatMoney(p.net_expected)}</td>
+                  <td><span className={`badge ${p.status === 'Matched' ? 'blue' : p.status === 'Discrepancy' ? 'red' : 'amber'}`}>{p.status}</span></td></tr>
+              ))}
+              {list.length === 0 && <tr><td colSpan={6} className="text-center text-muted" style={{padding:'32px'}}>No records in this category</td></tr>}
+            </tbody></table></div></div></div>
+          )
+        })()}
+      </div>
     )
   }
 
+  // ═══════════════════════════════════════
+  // RENDER: Settings
+  // ═══════════════════════════════════════
+
+  const renderSettings = () => (
+    <div className="animate-in">
+      <div className="page-header"><div><h1>Settings</h1><p className="page-subtitle">Account preferences</p></div></div>
+      <div className="card" style={{ maxWidth: 480 }}><div className="card-body">
+        <div className="flex items-center gap-4 mb-6" style={{ paddingBottom: 24, borderBottom: '1px solid var(--border-light)' }}>
+          <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--gradient-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: '1.25rem' }}>
+            {session.user?.name?.charAt(0) || 'D'}
+          </div>
+          <div><div className="font-semibold text-lg">{session.user?.name}</div><div className="text-sm text-muted">{session.user?.email}</div></div>
+        </div>
+        <button className="btn btn-danger" onClick={handleLogout}><LogOut size={16} /> Logout</button>
+      </div></div>
+    </div>
+  )
+
+  // ═══════════════════════════════════════
+  // MODALS
+  // ═══════════════════════════════════════
+
+  const renderModals = () => {
+    if (!showModal) return null
+
+    if (showModal === 'procedure') {
+      return (
+        <div className="modal-backdrop" onClick={() => { setShowModal(null); setModalStep(1) }}>
+          <div className="modal animate-slide-up" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Log Procedure</h2>
+              <button className="btn-ghost" onClick={() => { setShowModal(null); setModalStep(1) }}><X size={20} /></button>
+            </div>
+
+            <div className="modal-body">
+              <div className="step-indicator">
+                <div className={`step-indicator-dot ${modalStep >= 1 ? (modalStep > 1 ? 'done' : 'active') : ''}`}>{modalStep > 1 ? <CheckCircle2 size={14} /> : '1'}</div>
+                <div className={`step-indicator-line ${modalStep > 1 ? 'done' : ''}`} />
+                <div className={`step-indicator-dot ${modalStep >= 2 ? 'active' : ''}`}>2</div>
+              </div>
+
+              {modalStep === 1 && (
+                <div className="form-grid">
+                  <div className="form-field">
+                    <label className="form-label">Hospital</label>
+                    <select className="form-select" value={procForm.hospital_id} onChange={e => setProcForm({...procForm, hospital_id: e.target.value})}>
+                      <option value="">Select...</option>
+                      {hospitals.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-field">
+                    <label className="form-label">Date</label>
+                    <input className="form-input" type="date" value={procForm.date} onChange={e => setProcForm({...procForm, date: e.target.value})} />
+                  </div>
+                  <div className="form-field">
+                    <label className="form-label">Procedure Type</label>
+                    <input className="form-input" value={procForm.procedure_type} onChange={e => setProcForm({...procForm, procedure_type: e.target.value})} placeholder="Consultation" />
+                  </div>
+                  <div className="form-field">
+                    <label className="form-label">Patient Name</label>
+                    <input className="form-input" value={procForm.patient_name} onChange={e => setProcForm({...procForm, patient_name: e.target.value})} placeholder="Optional" />
+                  </div>
+                  <div className="form-field">
+                    <label className="form-label">Cases</label>
+                    <input className="form-input" type="number" min="1" value={procForm.cases} onChange={e => setProcForm({...procForm, cases: e.target.value})} />
+                  </div>
+                </div>
+              )}
+
+              {modalStep === 2 && (
+                <>
+                  <div className="form-grid mb-4">
+                    <div className="form-field full">
+                      <label className="form-label">Billing Amount (Gross)</label>
+                      <input className="form-input" type="number" min="0" value={procForm.gross_amount} onChange={e => setProcForm({...procForm, gross_amount: e.target.value})} placeholder="₹0" autoFocus />
+                    </div>
+                  </div>
+
+                  {selectedHospital && (
+                    <div style={{ background: '#f8fafc', borderRadius: 'var(--radius-sm)', padding: '16px', marginBottom: '16px' }}>
+                      <div className="text-xs font-semibold text-muted mb-2" style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}>Revenue Rule · {selectedHospital.name}</div>
+                      <div className="text-sm text-secondary">{selectedHospital.payout_percentage}% share · {selectedHospital.tds_rate}% TDS · {selectedHospital.deduction_rate}% deductions{selectedHospital.fixed_fee > 0 ? ` · ${formatMoney(selectedHospital.fixed_fee)} fixed fee` : ''}</div>
+                    </div>
+                  )}
+
+                  {waterfall && (
+                    <div className="waterfall">
+                      <div className="waterfall-row gross"><span className="waterfall-label">Gross Billing</span><span className="waterfall-amount">{formatMoney(waterfall.gross)}</span></div>
+                      <div className="waterfall-row"><span className="waterfall-label">Doctor Share ({selectedHospital?.payout_percentage}%)</span><span className="waterfall-amount">{formatMoney(waterfall.share)}</span></div>
+                      <div className="waterfall-row deduction"><span className="waterfall-label">TDS ({selectedHospital?.tds_rate}%)</span><span className="waterfall-amount">{formatMoney(waterfall.tds)}</span></div>
+                      <div className="waterfall-row deduction"><span className="waterfall-label">Deductions ({selectedHospital?.deduction_rate}%)</span><span className="waterfall-amount">{formatMoney(waterfall.ded)}</span></div>
+                      {waterfall.fixedFee > 0 && <div className="waterfall-row deduction"><span className="waterfall-label">Fixed Fee</span><span className="waterfall-amount">{formatMoney(waterfall.fixedFee)}</span></div>}
+                      <div className="waterfall-row net"><span className="waterfall-label">Net Expected Payout</span><span className="waterfall-amount">{formatMoney(waterfall.net)}</span></div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              {modalStep === 2 && <button className="btn btn-outline" onClick={() => setModalStep(1)}>Back</button>}
+              {modalStep === 1 && <button className="btn btn-primary" disabled={!procForm.hospital_id} onClick={() => setModalStep(2)}>Next <ArrowRight size={16} /></button>}
+              {modalStep === 2 && <button className="btn btn-success" onClick={saveProcedure}>Save Procedure</button>}
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    if (showModal === 'hospital') {
+      return (
+        <div className="modal-backdrop" onClick={() => setShowModal(null)}>
+          <div className="modal animate-slide-up" onClick={e => e.stopPropagation()}>
+            <div className="modal-header"><h2>Add Hospital</h2><button className="btn-ghost" onClick={() => setShowModal(null)}><X size={20} /></button></div>
+            <form onSubmit={saveHospital}>
+              <div className="modal-body">
+                <div className="form-grid">
+                  <div className="form-field"><label className="form-label">Hospital Name *</label><input className="form-input" required value={hospForm.name} onChange={e => setHospForm({...hospForm, name: e.target.value})} /></div>
+                  <div className="form-field"><label className="form-label">Location</label><input className="form-input" value={hospForm.location} onChange={e => setHospForm({...hospForm, location: e.target.value})} /></div>
+                  <div className="form-field"><label className="form-label">Revenue Share %</label><input className="form-input" type="number" min="0" max="100" value={hospForm.payout_percentage} onChange={e => setHospForm({...hospForm, payout_percentage: e.target.value})} /></div>
+                  <div className="form-field"><label className="form-label">TDS Rate %</label><input className="form-input" type="number" min="0" value={hospForm.tds_rate} onChange={e => setHospForm({...hospForm, tds_rate: e.target.value})} /></div>
+                  <div className="form-field"><label className="form-label">Deduction Rate %</label><input className="form-input" type="number" min="0" value={hospForm.deduction_rate} onChange={e => setHospForm({...hospForm, deduction_rate: e.target.value})} /></div>
+                  <div className="form-field"><label className="form-label">Fixed Fee (₹)</label><input className="form-input" type="number" min="0" value={hospForm.fixed_fee} onChange={e => setHospForm({...hospForm, fixed_fee: e.target.value})} /></div>
+                  <div className="form-field"><label className="form-label">Settlement Cycle</label><input className="form-input" value={hospForm.settlement_cycle} onChange={e => setHospForm({...hospForm, settlement_cycle: e.target.value})} /></div>
+                  <div className="form-field"><label className="form-label">Finance Contact</label><input className="form-input" value={hospForm.finance_contact_name} onChange={e => setHospForm({...hospForm, finance_contact_name: e.target.value})} placeholder="Name" /></div>
+                  <div className="form-field"><label className="form-label">Contact Email</label><input className="form-input" type="email" value={hospForm.finance_contact_email} onChange={e => setHospForm({...hospForm, finance_contact_email: e.target.value})} /></div>
+                  <div className="form-field"><label className="form-label">Contact Phone</label><input className="form-input" value={hospForm.finance_contact_phone} onChange={e => setHospForm({...hospForm, finance_contact_phone: e.target.value})} /></div>
+                </div>
+              </div>
+              <div className="modal-footer"><button type="button" className="btn btn-outline" onClick={() => setShowModal(null)}>Cancel</button><button type="submit" className="btn btn-primary">Save Hospital</button></div>
+            </form>
+          </div>
+        </div>
+      )
+    }
+
+    if (showModal === 'payout') {
+      const pendingProcs = procedures.filter(p => p.status === 'Pending' && Number(p.hospital_id) === Number(payoutForm.hospital_id))
+      return (
+        <div className="modal-backdrop" onClick={() => setShowModal(null)}>
+          <div className="modal animate-slide-up" onClick={e => e.stopPropagation()}>
+            <div className="modal-header"><h2>Record Payout</h2><button className="btn-ghost" onClick={() => setShowModal(null)}><X size={20} /></button></div>
+            <form onSubmit={savePayout}>
+              <div className="modal-body">
+                <div className="form-grid">
+                  <div className="form-field">
+                    <label className="form-label">Hospital</label>
+                    <select className="form-select" value={payoutForm.hospital_id} onChange={e => setPayoutForm({...payoutForm, hospital_id: e.target.value, procedure_ids: []})}>
+                      <option value="">Select...</option>
+                      {hospitals.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-field"><label className="form-label">Date</label><input className="form-input" type="date" value={payoutForm.date} onChange={e => setPayoutForm({...payoutForm, date: e.target.value})} /></div>
+                  <div className="form-field"><label className="form-label">Period</label><input className="form-input" type="month" value={payoutForm.period} onChange={e => setPayoutForm({...payoutForm, period: e.target.value})} /></div>
+                  <div className="form-field"><label className="form-label">Amount Received (₹)</label><input className="form-input" type="number" min="0" value={payoutForm.actual_net} onChange={e => setPayoutForm({...payoutForm, actual_net: e.target.value})} /></div>
+                  <div className="form-field full"><label className="form-label">Transaction Reference</label><input className="form-input" value={payoutForm.transaction_ref} onChange={e => setPayoutForm({...payoutForm, transaction_ref: e.target.value})} placeholder="UTR / NEFT / Cheque No." /></div>
+                </div>
+
+                {payoutForm.hospital_id && pendingProcs.length > 0 && (
+                  <div className="mt-4">
+                    <label className="form-label mb-2" style={{display:'block'}}>Link Pending Procedures</label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
+                      {pendingProcs.map(p => (
+                        <label key={p.id} className="flex items-center gap-3" style={{ padding: '8px 12px', background: '#f8fafc', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: '0.875rem' }}>
+                          <input type="checkbox" checked={payoutForm.procedure_ids.includes(p.id)}
+                            onChange={e => {
+                              setPayoutForm(prev => ({...prev, procedure_ids: e.target.checked ? [...prev.procedure_ids, p.id] : prev.procedure_ids.filter(x => x !== p.id) }))
+                            }} />
+                          <span>{p.date} · {p.procedure_type} · {formatMoney(p.net_expected)}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer"><button type="button" className="btn btn-outline" onClick={() => setShowModal(null)}>Cancel</button><button type="submit" className="btn btn-success">Save Payout</button></div>
+            </form>
+          </div>
+        </div>
+      )
+    }
+
+    return null
+  }
+
+  // ═══════════════════════════════════════
+  // RENDER: Page Router
+  // ═══════════════════════════════════════
 
   const renderPage = () => {
-    if (activePage === 'Dashboard') return renderDashboard()
-    if (activePage === 'My Hospitals') return renderHospitals()
-    if (activePage === 'My Records') return renderRecords()
-    if (activePage === 'My Payments') return renderPayments()
-    if (activePage === 'Discrepancies') return renderDiscrepancies()
-    if (activePage === 'Reports') return renderReports()
-    if (activePage === 'Settings') return renderSettings()
-    return renderDashboard()
+    switch (page) {
+      case 'Dashboard': return renderDashboard()
+      case 'Ledger': return renderLedger()
+      case 'Hospitals': return renderHospitals()
+      case 'Payouts': return renderPayouts()
+      case 'Upload': return renderUpload()
+      case 'Reconciliation': return renderReconciliation()
+      case 'Settings': return renderSettings()
+      default: return renderDashboard()
+    }
   }
+
+  // ═══════════════════════════════════════
+  // AUTH SCREENS
+  // ═══════════════════════════════════════
 
   if (!session.loggedIn) {
     return (
       <div className="login-shell">
-        <div className="auth-panel single-col">
-          <div className="login-card">
-            {authView === 'login' && (
-              <>
-                <div className="login-header">
-                  <img src="doctrack-logo.png" alt="DocTrack" className="login-logo" style={{ objectFit: 'contain' }} />
-                  <p className="eyebrow neutral" style={{ marginTop: '12px' }}>Secure access</p>
-                  <h1>DocTrack</h1>
-                  <p className="text-sm text-neutral-400 mt-2">Track Visits. Manage Revenue.</p>
-                </div>
-                <form className="login-form" onSubmit={handleLogin}>
-                  <label className="field"><span className="field-label">Username</span><input type="text" value={loginForm.username} onChange={(event) => setLoginForm({ ...loginForm, username: event.target.value })} placeholder="Enter username" /></label>
-                  <label className="field">
-                    <span className="field-label">Password</span>
-                    <div className="relative" style={{ position: 'relative' }}>
-                      <input type={showLoginPassword ? "text" : "password"} value={loginForm.password} onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })} placeholder="Enter password" style={{ width: '100%', paddingRight: '40px' }} />
-                      <button type="button" onClick={() => setShowLoginPassword(!showLoginPassword)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }} className="text-neutral-400">
-                        {showLoginPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                      </button>
-                    </div>
-                  </label>
-                  <label className="field flex items-center" style={{ flexDirection: 'row', marginTop: '4px', gap: '8px' }}>
-                    <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} style={{ width: 'auto' }} />
-                    <span className="text-sm text-neutral-500">Remember me</span>
-                  </label>
-                  {loginError && <div className="login-error">{loginError}</div>}
-                  <button type="submit" className="primary-btn full-width-btn mt-2">Login</button>
-                </form>
-                <div className="mt-6 text-center">
-                  <button className="text-orange-600 font-medium hover-text-orange-700 bg-transparent border-0 p-0" style={{cursor:'pointer'}} onClick={() => { setAuthView('signup'); setSignupError(''); setLoginError(''); }}>
-                    Don't have an account? Create an account
-                  </button>
-                </div>
-              </>
-            )}
-
-            {authView === 'signup' && (
-              <>
-                <div className="login-header">
-                  <img src="doctrack-logo.png" alt="DocTrack" className="login-logo" style={{ objectFit: 'contain' }} />
-                  <p className="eyebrow neutral">Get Started</p>
-                  <h1>Create your account</h1>
-                  <p className="text-sm text-neutral-400 mt-2">Set up your account to manage your hospitals, services and payments.</p>
-                </div>
-                <form className="login-form" onSubmit={handleSignup}>
-                  <label className="field"><span className="field-label">Full Name</span><input type="text" value={signupForm.name || ''} onChange={(event) => setSignupForm({ ...signupForm, name: event.target.value })} placeholder="Your full name" /></label>
-                  <label className="field"><span className="field-label">Email</span><input type="email" value={signupForm.email || ''} onChange={(event) => setSignupForm({ ...signupForm, email: event.target.value })} placeholder="you@example.com" /></label>
-                  <label className="field"><span className="field-label">Username</span><input type="text" value={signupForm.username} onChange={(event) => setSignupForm({ ...signupForm, username: event.target.value })} placeholder="Choose a username" /></label>
-                  <label className="field">
-                    <span className="field-label">Password</span>
-                    <div className="relative" style={{ position: 'relative' }}>
-                      <input type={showSignupPassword ? "text" : "password"} value={signupForm.password} onChange={(event) => setSignupForm({ ...signupForm, password: event.target.value })} placeholder="Create a strong password" style={{ width: '100%', paddingRight: '40px' }} />
-                      <button type="button" onClick={() => setShowSignupPassword(!showSignupPassword)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }} className="text-neutral-400">
-                        {showSignupPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                      </button>
-                    </div>
-                  </label>
-                  <label className="field">
-                    <span className="field-label">Confirm Password</span>
-                    <div className="relative" style={{ position: 'relative' }}>
-                      <input type={showSignupConfirmPassword ? "text" : "password"} value={signupForm.confirmPassword} onChange={(event) => setSignupForm({ ...signupForm, confirmPassword: event.target.value })} placeholder="Confirm password" style={{ width: '100%', paddingRight: '40px' }} />
-                      <button type="button" onClick={() => setShowSignupConfirmPassword(!showSignupConfirmPassword)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }} className="text-neutral-400">
-                        {showSignupConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                      </button>
-                    </div>
-                  </label>
-                  {signupError && <div className="login-error">{signupError}</div>}
-                  <button type="submit" className="primary-btn full-width-btn mt-2">Create Account</button>
-                </form>
-                <div className="mt-6 text-center">
-                  <button className="text-orange-600 font-medium hover-text-orange-700 bg-transparent border-0 p-0" style={{cursor:'pointer'}} onClick={() => { setAuthView('login'); setSignupError(''); setLoginError(''); }}>
-                    Already have an account? Log in
-                  </button>
-                </div>
-              </>
-            )}
-
-            {authView === 'success' && (
-              <div className="text-center p-6">
-                <h3 className="text-2xl font-semibold text-success mb-2">✅ Account created successfully</h3>
-                <p className="text-neutral-400 mb-6">You can now log in using your new credentials.</p>
-                <button className="primary-btn full-width-btn" onClick={() => { setAuthView('login'); setSignupForm({ username: '', password: '', confirmPassword: '' }); }}>
-                  Go to Login
-                </button>
+        <div className="login-card">
+          {authView === 'login' && (<>
+            <div className="login-header">
+              <img src="doctrack-logo.png" alt="DocTrack" className="login-logo" style={{ objectFit: 'contain' }} />
+              <h1>DocTrack</h1>
+              <p>Revenue Reconciliation Platform</p>
+            </div>
+            <form className="login-form" onSubmit={handleLogin}>
+              <div className="login-field">
+                <label>Username or Email</label>
+                <input className="form-input dark" value={loginForm.username} onChange={e => setLoginForm({...loginForm, username: e.target.value})} placeholder="Enter username" />
               </div>
-            )}
-          </div>
+              <div className="login-field">
+                <label>Password</label>
+                <div style={{ position: 'relative' }}>
+                  <input className="form-input dark" type={showPw ? 'text' : 'password'} value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} placeholder="Enter password" style={{ paddingRight: 40 }} />
+                  <button type="button" className="password-toggle" onClick={() => setShowPw(!showPw)}>{showPw ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--sidebar-text)' }}>
+                <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} /> Remember me
+              </label>
+              {loginError && <div className="login-error">{loginError}</div>}
+              <button type="submit" className="btn btn-primary w-full" style={{ justifyContent: 'center', padding: '12px' }}>Login</button>
+            </form>
+            <div className="login-switch"><button onClick={() => { setAuthView('signup'); setSignupError('') }}>Don't have an account? Create one</button></div>
+          </>)}
+
+          {authView === 'signup' && (<>
+            <div className="login-header">
+              <img src="doctrack-logo.png" alt="DocTrack" className="login-logo" style={{ objectFit: 'contain' }} />
+              <h1>Create Account</h1>
+              <p>Set up your revenue tracking</p>
+            </div>
+            <form className="login-form" onSubmit={handleSignup}>
+              <div className="login-field"><label>Full Name</label><input className="form-input dark" value={signupForm.name || ''} onChange={e => setSignupForm({...signupForm, name: e.target.value})} placeholder="Dr. Full Name" /></div>
+              <div className="login-field"><label>Email</label><input className="form-input dark" type="email" value={signupForm.email || ''} onChange={e => setSignupForm({...signupForm, email: e.target.value})} placeholder="you@example.com" /></div>
+              <div className="login-field"><label>Username</label><input className="form-input dark" value={signupForm.username || ''} onChange={e => setSignupForm({...signupForm, username: e.target.value})} placeholder="Choose a username" /></div>
+              <div className="login-field">
+                <label>Password</label>
+                <input className="form-input dark" type="password" value={signupForm.password || ''} onChange={e => setSignupForm({...signupForm, password: e.target.value})} placeholder="Min 6 characters" />
+              </div>
+              <div className="login-field"><label>Confirm Password</label><input className="form-input dark" type="password" value={signupForm.confirmPassword || ''} onChange={e => setSignupForm({...signupForm, confirmPassword: e.target.value})} placeholder="Confirm password" /></div>
+              {signupError && <div className="login-error">{signupError}</div>}
+              <button type="submit" className="btn btn-primary w-full" style={{ justifyContent: 'center', padding: '12px' }}>Create Account</button>
+            </form>
+            <div className="login-switch"><button onClick={() => { setAuthView('login'); setLoginError('') }}>Already have an account? Log in</button></div>
+          </>)}
+
+          {authView === 'success' && (
+            <div className="text-center" style={{ padding: '32px 0' }}>
+              <CheckCircle2 size={48} className="text-green" style={{ margin: '0 auto 16px' }} />
+              <h2 style={{ color: '#f8fafc', marginBottom: 8 }}>Account Created</h2>
+              <p className="text-muted mb-6">You can now log in with your credentials.</p>
+              <button className="btn btn-primary w-full" style={{ justifyContent: 'center' }} onClick={() => { setAuthView('login'); setSignupForm({}) }}>Go to Login</button>
+            </div>
+          )}
         </div>
       </div>
     )
   }
 
-  return (
-    <>
-      <div className="app-shell" style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
-        <button type="button" className="mobile-toggle flex items-center justify-center" aria-label="Toggle menu" onClick={() => setSidebarCollapsed(!sidebarCollapsed)} style={{ position: 'fixed', left: '16px', top: '16px', zIndex: 50, background: 'white', borderRadius: '8px', padding: '8px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-          <Menu size={24} className="text-neutral-900" />
-        </button>
-        <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`} style={{ width: sidebarCollapsed ? '0px' : '250px', overflow: 'hidden', transition: 'width 0.3s ease', background: '#1e293b', color: '#f8fafc', padding: sidebarCollapsed ? '0' : '20px 16px', height: '100vh', position: 'sticky', top: 0 }}>
-          <div className="brand-block" style={{ opacity: sidebarCollapsed ? 0 : 1, transition: 'opacity 0.2s', marginTop: '40px' }}>
-            <div className="brand-inner">
-              <img src="doctrack-logo.png" alt="" className="sidebar-logo" style={{ objectFit: 'contain' }} />
-              <div className="brand-text">
-                <span className="brand-name">DocTrack</span>
-                <span className="brand-tagline">Manage Revenue</span>
-              </div>
-            </div>
-          </div>
-          <nav className="sidebar-nav" aria-label="Sidebar navigation" style={{ opacity: sidebarCollapsed ? 0 : 1, transition: 'opacity 0.2s' }}>
-            <button type="button" className={activePage === 'Dashboard' ? 'nav-item active' : 'nav-item'} onClick={() => { setActivePage('Dashboard'); setViewState('list'); }}><span className="nav-icon"><LayoutDashboard size={20} /></span>Dashboard</button>
-            <button type="button" className={activePage === 'My Hospitals' ? 'nav-item active' : 'nav-item'} onClick={() => { setActivePage('My Hospitals'); setViewState('list'); }}><span className="nav-icon"><Building2 size={20} /></span>Hospitals</button>
-            <button type="button" className={activePage === 'My Records' ? 'nav-item active' : 'nav-item'} onClick={() => { setActivePage('My Records'); setViewState('list'); }}><span className="nav-icon"><FileText size={20} /></span>Visits</button>
-            <button type="button" className={activePage === 'My Payments' ? 'nav-item active' : 'nav-item'} onClick={() => { setActivePage('My Payments'); setViewState('list'); }}><span className="nav-icon"><IndianRupee size={20} /></span>Payments</button>
-            <button type="button" className={activePage === 'Discrepancies' ? 'nav-item active' : 'nav-item'} onClick={() => { setActivePage('Discrepancies'); setViewState('list'); }}><span className="nav-icon"><AlertTriangle size={20} /></span>Discrepancies</button>
-            <button type="button" className={activePage === 'Reports' ? 'nav-item active' : 'nav-item'} onClick={() => { setActivePage('Reports'); }}><span className="nav-icon"><BarChart3 size={20} /></span>Reports</button>
-            <button type="button" className={activePage === 'Settings' ? 'nav-item active' : 'nav-item'} onClick={() => { setActivePage('Settings'); }}><span className="nav-icon"><Settings size={20} /></span>Settings</button>
-            <button type="button" className="nav-item logout-item" onClick={handleLogout}><span className="nav-icon"><LogOut size={20} /></span>Logout</button>
-          </nav>
-        </aside>
-        <main className="content-area" style={{ flex: 1, padding: '28px 28px 46px', maxWidth: sidebarCollapsed ? '100vw' : 'calc(100vw - 250px)', transition: 'max-width 0.3s ease', paddingTop: '70px' }}>{renderPage()}</main>
-      </div>
+  // ═══════════════════════════════════════
+  // MAIN LAYOUT
+  // ═══════════════════════════════════════
 
-      {confirmDelete && (
-        <div className="modal-backdrop" onClick={() => setConfirmDelete(null)}>
-          <div className="confirm-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
-            <h3>{confirmDelete.title}</h3>
-            <p>{confirmDelete.message}</p>
-            <div className="confirm-actions">
-              <button type="button" className="secondary-btn" onClick={() => setConfirmDelete(null)}>Cancel</button>
-              <button type="button" className="danger-btn" onClick={() => {
-                if (confirmDelete.type === 'record') {
-                  handleRecordDelete(confirmDelete.id)
-                } else {
-                  handleHospitalDelete(confirmDelete.id)
-                }
-              }}>Delete</button>
-            </div>
+  const navItems = [
+    { key: 'Dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { key: 'Ledger', icon: FileText, label: 'Ledger' },
+    { key: 'Hospitals', icon: Building2, label: 'Hospitals' },
+    { key: 'Payouts', icon: IndianRupee, label: 'Payouts' },
+    { key: 'Upload', icon: Upload, label: 'Upload Statement' },
+    { key: 'Reconciliation', icon: Activity, label: 'Reconciliation' },
+  ]
+
+  return (<>
+    <div className="app-shell">
+      <button className="mobile-menu-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>
+        {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+      </button>
+
+      {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
+
+      <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+        <div className="sidebar-header">
+          <div className="brand-inner">
+            <img src="doctrack-logo.png" alt="" className="sidebar-logo" style={{ objectFit: 'contain' }} />
+            <div className="brand-text"><span className="brand-name">DocTrack</span><span className="brand-tagline">Revenue Reconciliation</span></div>
           </div>
         </div>
-      )}
-    </>
-  )
+
+        <nav className="sidebar-nav">
+          {navItems.map(n => (
+            <button key={n.key} className={`nav-item ${page === n.key ? 'active' : ''}`} onClick={() => { setPage(n.key); setSidebarOpen(false) }}>
+              <span className="nav-icon"><n.icon size={18} /></span>{n.label}
+            </button>
+          ))}
+
+          <div className="nav-spacer" />
+
+          <button className={`nav-item ${page === 'Settings' ? 'active' : ''}`} onClick={() => { setPage('Settings'); setSidebarOpen(false) }}>
+            <span className="nav-icon"><User size={18} /></span>Settings
+          </button>
+          <button className="nav-item logout-item" onClick={handleLogout}>
+            <span className="nav-icon"><LogOut size={18} /></span>Logout
+          </button>
+        </nav>
+      </aside>
+
+      <main className="content-area">{renderPage()}</main>
+    </div>
+
+    {renderModals()}
+  </>)
 }
 
 export default App
