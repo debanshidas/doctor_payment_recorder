@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, Building2, CreditCard, FileBarChart, ScrollText, LogOut, Shield, Eye, EyeOff, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { LayoutDashboard, Users, Building2, CreditCard, FileBarChart, ScrollText, LogOut, Shield, Eye, EyeOff, CheckCircle, Clock, Settings } from 'lucide-react';
 
 const API = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '') + '/api';
 
@@ -427,6 +427,55 @@ function AuditLogsPage() {
   );
 }
 
+// ── Settings ──
+function SettingsPage({ session }) {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [msg, setMsg] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setMsg(null);
+    if (next !== confirm) { setMsg({ type: 'error', text: 'New passwords do not match.' }); return; }
+    setSaving(true);
+    try {
+      await api('/admin/password', { method: 'PUT', body: JSON.stringify({ current_password: current, new_password: next }) });
+      setMsg({ type: 'success', text: 'Password updated.' });
+      setCurrent(''); setNext(''); setConfirm('');
+    } catch (err) {
+      setMsg({ type: 'error', text: err.message });
+    }
+    setSaving(false);
+  }
+
+  return (
+    <>
+      <div className="page-header"><h1>Settings</h1><p>Signed in as {session.name} ({session.username})</p></div>
+      <div className="card" style={{ maxWidth: 440 }}>
+        <div className="card-header">Change Password</div>
+        <form onSubmit={handleSubmit} style={{ padding: 20 }}>
+          {msg && <div className={msg.type === 'error' ? 'error-msg' : 'success-msg'}>{msg.text}</div>}
+          <div className="form-group">
+            <label>Current Password</label>
+            <input type="password" value={current} onChange={e => setCurrent(e.target.value)} required />
+          </div>
+          <div className="form-group">
+            <label>New Password</label>
+            <input type="password" value={next} onChange={e => setNext(e.target.value)} minLength={8} required />
+          </div>
+          <div className="form-group">
+            <label>Confirm New Password</label>
+            <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required />
+          </div>
+          <button className="btn-primary" type="submit" disabled={saving}>{saving ? 'Saving...' : 'Update Password'}</button>
+        </form>
+      </div>
+    </>
+  );
+}
+
 // ── Main App ──
 export default function App() {
   const [session, setSession] = useState(() => {
@@ -449,6 +498,7 @@ export default function App() {
     { id: 'payments', label: 'Payments', icon: CreditCard },
     { id: 'reports', label: 'Reports', icon: FileBarChart },
     { id: 'audit', label: 'Audit Logs', icon: ScrollText },
+    { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
   const pages = {
@@ -458,6 +508,7 @@ export default function App() {
     payments: PaymentsPage,
     reports: ReportsPage,
     audit: AuditLogsPage,
+    settings: SettingsPage,
   };
 
   const PageComponent = pages[page] || DashboardPage;
@@ -481,7 +532,7 @@ export default function App() {
         </div>
       </aside>
       <main className="main-content">
-        <PageComponent key={page} />
+        <PageComponent key={page} session={session} />
       </main>
     </div>
   );

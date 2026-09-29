@@ -127,6 +127,15 @@ body {
   margin-bottom: 16px;
 }
 
+.success-msg {
+  background: var(--success-light);
+  color: var(--success);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
 /* Layout */
 .app-layout { display: flex; min-height: 100vh; }
 .sidebar {

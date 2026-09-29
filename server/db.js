@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
+import crypto from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -120,6 +121,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS audit_logs (
     FOREIGN KEY(admin_id) REFERENCES users(id) ON DELETE CASCADE
 )`);
 
-db.exec(`INSERT OR IGNORE INTO users (username, email, name, password_hash, role, status) VALUES ('admin', 'admin@doctrack.com', 'System Admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 'admin', 'active')`);
+const adminHash = crypto.createHash('sha256').update(process.env.ADMIN_PASSWORD || 'admin123').digest('hex');
+db.prepare(`INSERT OR IGNORE INTO users (username, email, name, password_hash, role, status) VALUES ('admin', 'admin@doctrack.com', 'System Admin', ?, 'admin', 'active')`).run(adminHash);
 
 export default db;

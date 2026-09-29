@@ -643,6 +643,20 @@ app.get('/api/admin/reports', adminAuth, async (req, res) => {
     } catch (err) { res.status(500).json({ error: 'Failed to generate reports.' }); }
 });
 
+app.put('/api/admin/password', adminAuth, async (req, res) => {
+    const { current_password, new_password } = req.body;
+    if (!current_password || !new_password) return res.status(400).json({ error: 'Current and new password are required.' });
+    if (new_password.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters.' });
+    try {
+        const user = await dbGet('SELECT id FROM users WHERE id = ? AND password_hash = ?', [req.userId, hashPassword(current_password)]);
+        if (!user) return res.status(401).json({ error: 'Current password is incorrect.' });
+        await dbRun('UPDATE users SET password_hash = ? WHERE id = ?', [hashPassword(new_password), req.userId]);
+        await dbRun('INSERT INTO audit_logs (admin_id, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?)',
+            [req.userId, 'change_password', 'user', req.userId, 'Admin password changed']);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'Failed to change password.' }); }
+});
+
 app.get('/api/admin/audit-logs', adminAuth, async (req, res) => {
     try {
         const logs = await dbAll(`SELECT al.*, u.name as admin_name, u.username as admin_username
