@@ -660,7 +660,7 @@ app.get('/api/admin/audit-logs', adminAuth, async (req, res) => {
     } catch (err) { res.status(500).json({ error: 'Failed to fetch audit logs.' }); }
 });
 
-app.get('/', (req, res) => res.json({ status: 'ok' }));
+app.get('/', (req, res) => res.json({ status: 'ok', database: process.env.TURSO_DATABASE_URL ? 'turso' : 'local-file' }));
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
