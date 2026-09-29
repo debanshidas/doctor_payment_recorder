@@ -11,46 +11,78 @@ const db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
         console.error('Error connecting to database:', err);
     } else {
-        console.log('Connected to SQLite database.');
+        console.log('Connected to SQLite database at', dbPath);
         initDb();
     }
 });
 
 function initDb() {
     db.serialize(() => {
-        // Users Table
+        db.run('PRAGMA foreign_keys = ON');
+
         db.run(`CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
             password_hash TEXT NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            role TEXT NOT NULL DEFAULT 'doctor',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_login DATETIME
         )`);
 
-        // Hospitals Table
         db.run(`CREATE TABLE IF NOT EXISTS hospitals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
-            hospital_name TEXT NOT NULL,
-            location TEXT,
+            name TEXT NOT NULL,
+            location TEXT NOT NULL DEFAULT 'Bangalore',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(user_id) REFERENCES users(id)
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         )`);
 
-        // Transactions Table (Single Source of Truth for Visits and Revenue)
-        db.run(`CREATE TABLE IF NOT EXISTS transactions (
+        db.run(`CREATE TABLE IF NOT EXISTS hospital_services (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            hospital_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            rate REAL NOT NULL DEFAULT 0,
+            FOREIGN KEY(hospital_id) REFERENCES hospitals(id) ON DELETE CASCADE
+        )`);
+
+        db.run(`CREATE TABLE IF NOT EXISTS records (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
-            hospital_id INTEGER NOT NULL,
-            transaction_reference TEXT UNIQUE NOT NULL,
-            visit_date TEXT NOT NULL,
-            purpose TEXT,
+            hospital_name TEXT NOT NULL,
+            date TEXT NOT NULL,
+            service TEXT NOT NULL,
             cases INTEGER NOT NULL DEFAULT 1,
-            amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-            payment_status TEXT NOT NULL DEFAULT 'Pending',
-            payment_date TEXT,
+            expected_amount REAL NOT NULL DEFAULT 0,
+            status TEXT DEFAULT 'Active',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(user_id) REFERENCES users(id),
-            FOREIGN KEY(hospital_id) REFERENCES hospitals(id)
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )`);
+
+        db.run(`CREATE TABLE IF NOT EXISTS payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            hospital_name TEXT NOT NULL,
+            date TEXT NOT NULL,
+            amount REAL NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'Paid',
+            record_id INTEGER,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )`);
+
+        db.run(`CREATE TABLE IF NOT EXISTS discrepancies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            hospital_name TEXT NOT NULL,
+            expected_amount REAL NOT NULL DEFAULT 0,
+            received_amount REAL NOT NULL DEFAULT 0,
+            difference REAL NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'Open',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         )`);
     });
 }

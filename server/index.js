@@ -7,7 +7,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Helper to wrap db.all in a Promise
 const dbAll = (query, params = []) => new Promise((resolve, reject) => {
     db.all(query, params, (err, rows) => {
         if (err) reject(err);
@@ -33,7 +32,6 @@ function hashPassword(password) {
     return crypto.createHash('sha256').update(password).digest('hex');
 }
 
-// Authentication Middleware Mock (Expecting user_id in headers for simplicity)
 const auth = (req, res, next) => {
     const userId = req.headers['x-user-id'];
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -41,98 +39,181 @@ const auth = (req, res, next) => {
     next();
 };
 
-// Auth
+// ── Auth ──
+
 app.post('/api/auth/register', async (req, res) => {
-    const { username, password } = req.body;
+    const { username, email, name, password } = req.body;
+    if (!username || !password || !name || !email) {
+        return res.status(400).json({ error: 'All fields are required.' });
+    }
     try {
         const hashed = hashPassword(password);
-        const result = await dbRun('INSERT INTO users (username, password_hash) VALUES (?, ?)', [username, hashed]);
-        res.json({ id: result.lastID, username, role: 'doctor' });
+        const result = await dbRun(
+            'INSERT INTO users (username, email, name, password_hash, role) VALUES (?, ?, ?, ?, ?)',
+            [username, email, name, hashed, 'doctor']
+        );
+        res.json({ id: result.lastID, username, email, name, role: 'doctor' });
     } catch (err) {
-        res.status(400).json({ error: 'Username may already exist' });
+        if (err.message?.includes('UNIQUE')) {
+            return res.status(400).json({ error: 'An account with this email already exists.' });
+        }
+        res.status(500).json({ error: 'Registration failed.' });
     }
 });
 
 app.post('/api/auth/login', async (req, res) => {
     const { username, password } = req.body;
+    if (!username || !password) {
+        return res.status(400).json({ error: 'Username and password required.' });
+    }
     const hashed = hashPassword(password);
-    const user = await dbGet('SELECT id, username FROM users WHERE username = ? AND password_hash = ?', [username, hashed]);
-    if (user) res.json({ ...user, role: 'doctor' });
-    else res.status(401).json({ error: 'Invalid credentials' });
+    const user = await dbGet(
+        'SELECT id, username, email, name, role FROM users WHERE (username = ? OR email = ?) AND password_hash = ?',
+        [username, username, hashed]
+    );
+    if (user) {
+        await dbRun('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?', [user.id]);
+        res.json(user);
+    } else {
+        res.status(401).json({ error: 'Invalid username or password.' });
+    }
 });
 
-// Dashboard Analytics (Server-side calculations)
-app.get('/api/dashboard', auth, async (req, res) => {
-    const stats = await dbGet(`
-        SELECT 
-            COALESCE(SUM(amount), 0) as totalRevenue,
-            COALESCE(SUM(CASE WHEN payment_status = 'Paid' THEN amount ELSE 0 END), 0) as totalReceived,
-            COALESCE(SUM(CASE WHEN payment_status != 'Paid' THEN amount ELSE 0 END), 0) as totalPending,
-            COUNT(*) as totalVisits,
-            COALESCE(SUM(cases), 0) as totalCases
-        FROM transactions WHERE user_id = ?
-    `, [req.userId]);
-    
-    const hStats = await dbGet(`SELECT COUNT(*) as totalHospitals FROM hospitals WHERE user_id = ?`, [req.userId]);
+// ── Hospitals ──
 
-    res.json({ ...stats, totalHospitals: hStats.totalHospitals });
-});
-
-// Hospitals with Server-side Aggregation
 app.get('/api/hospitals', auth, async (req, res) => {
-    const hospitals = await dbAll(`
-        SELECT 
-            h.id, h.hospital_name, h.location,
-            COUNT(t.id) as visits,
-            COALESCE(SUM(t.cases), 0) as cases,
-            COALESCE(SUM(t.amount), 0) as expected,
-            COALESCE(SUM(CASE WHEN t.payment_status = 'Paid' THEN t.amount ELSE 0 END), 0) as received,
-            COALESCE(SUM(CASE WHEN t.payment_status != 'Paid' THEN t.amount ELSE 0 END), 0) as outstanding,
-            MAX(t.visit_date) as last_visit
-        FROM hospitals h
-        LEFT JOIN transactions t ON h.id = t.hospital_id
-        WHERE h.user_id = ?
-        GROUP BY h.id
-        ORDER BY h.id DESC
-    `, [req.userId]);
+    const hospitals = await dbAll(
+        'SELECT id, name, location FROM hospitals WHERE user_id = ? ORDER BY id DESC',
+        [req.userId]
+    );
+    for (const h of hospitals) {
+        h.services = await dbAll(
+            'SELECT name, rate FROM hospital_services WHERE hospital_id = ?',
+            [h.id]
+        );
+        h.userId = req.userId;
+    }
     res.json(hospitals);
 });
 
 app.post('/api/hospitals', auth, async (req, res) => {
-    const { name, location } = req.body;
-    const result = await dbRun('INSERT INTO hospitals (user_id, hospital_name, location) VALUES (?, ?, ?)', [req.userId, name, location]);
-    res.json({ id: result.lastID, hospital_name: name, location });
+    const { name, location, services } = req.body;
+    if (!name) return res.status(400).json({ error: 'Hospital name is required.' });
+    try {
+        const result = await dbRun(
+            'INSERT INTO hospitals (user_id, name, location) VALUES (?, ?, ?)',
+            [req.userId, name, location || 'Bangalore']
+        );
+        const hospitalId = result.lastID;
+        const svcList = services && services.length ? services : [{ name: 'Consultation', rate: 1000 }];
+        for (const svc of svcList) {
+            await dbRun(
+                'INSERT INTO hospital_services (hospital_id, name, rate) VALUES (?, ?, ?)',
+                [hospitalId, svc.name, svc.rate]
+            );
+        }
+        res.json({ id: hospitalId, userId: req.userId, name, location: location || 'Bangalore', services: svcList });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to create hospital.' });
+    }
 });
 
-// Transactions
-app.get('/api/transactions', auth, async (req, res) => {
-    const tx = await dbAll(`
-        SELECT t.*, h.hospital_name 
-        FROM transactions t 
-        JOIN hospitals h ON t.hospital_id = h.id 
-        WHERE t.user_id = ? 
-        ORDER BY t.visit_date DESC, t.id DESC
-    `, [req.userId]);
-    res.json(tx);
+app.delete('/api/hospitals/:id', auth, async (req, res) => {
+    const hospital = await dbGet(
+        'SELECT name FROM hospitals WHERE id = ? AND user_id = ?',
+        [req.params.id, req.userId]
+    );
+    if (!hospital) return res.status(404).json({ error: 'Hospital not found.' });
+
+    await dbRun('DELETE FROM hospitals WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
+    await dbRun('DELETE FROM records WHERE user_id = ? AND hospital_name = ?', [req.userId, hospital.name]);
+    await dbRun('DELETE FROM payments WHERE user_id = ? AND hospital_name = ?', [req.userId, hospital.name]);
+    await dbRun('DELETE FROM discrepancies WHERE user_id = ? AND hospital_name = ?', [req.userId, hospital.name]);
+    res.json({ success: true });
 });
 
-app.post('/api/transactions', auth, async (req, res) => {
-    const { hospital_id, visit_date, purpose, cases, amount, payment_status } = req.body;
-    const lastTx = await dbGet('SELECT id FROM transactions ORDER BY id DESC LIMIT 1');
-    const nextId = lastTx ? lastTx.id + 1 : 1;
-    const txRef = `DT-2026-${String(nextId).padStart(4, '0')}`;
-    
-    const result = await dbRun(`
-        INSERT INTO transactions (user_id, hospital_id, transaction_reference, visit_date, purpose, cases, amount, payment_status) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [req.userId, hospital_id, txRef, visit_date, purpose, cases, amount, payment_status]);
-    
-    res.json({ id: result.lastID, transaction_reference: txRef });
+// ── Records ──
+
+app.get('/api/records', auth, async (req, res) => {
+    const rows = await dbAll(
+        'SELECT id, hospital_name as hospital, date, service, cases, expected_amount as expectedAmount, status FROM records WHERE user_id = ? ORDER BY id DESC',
+        [req.userId]
+    );
+    rows.forEach(r => { r.userId = req.userId; });
+    res.json(rows);
 });
 
-app.put('/api/transactions/:id/pay', auth, async (req, res) => {
-    const date = new Date().toISOString().split('T')[0];
-    await dbRun('UPDATE transactions SET payment_status = ?, payment_date = ? WHERE id = ? AND user_id = ?', ['Paid', date, req.params.id, req.userId]);
+app.post('/api/records', auth, async (req, res) => {
+    const { hospital, date, service, cases, expectedAmount } = req.body;
+    const result = await dbRun(
+        'INSERT INTO records (user_id, hospital_name, date, service, cases, expected_amount) VALUES (?, ?, ?, ?, ?, ?)',
+        [req.userId, hospital, date, service, cases || 1, expectedAmount || 0]
+    );
+    res.json({ id: result.lastID, userId: req.userId, hospital, date, service, cases: cases || 1, expectedAmount: expectedAmount || 0, status: 'Active' });
+});
+
+app.put('/api/records/:id', auth, async (req, res) => {
+    const { status } = req.body;
+    await dbRun(
+        'UPDATE records SET status = ? WHERE id = ? AND user_id = ?',
+        [status, req.params.id, req.userId]
+    );
+    res.json({ success: true });
+});
+
+app.delete('/api/records/:id', auth, async (req, res) => {
+    await dbRun('DELETE FROM records WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
+    res.json({ success: true });
+});
+
+// ── Payments ──
+
+app.get('/api/payments', auth, async (req, res) => {
+    const rows = await dbAll(
+        'SELECT id, hospital_name as hospital, date, amount, status, record_id as recordId FROM payments WHERE user_id = ? ORDER BY id DESC',
+        [req.userId]
+    );
+    rows.forEach(p => { p.userId = req.userId; });
+    res.json(rows);
+});
+
+app.post('/api/payments', auth, async (req, res) => {
+    const { hospital, date, amount, status, recordId } = req.body;
+    const result = await dbRun(
+        'INSERT INTO payments (user_id, hospital_name, date, amount, status, record_id) VALUES (?, ?, ?, ?, ?, ?)',
+        [req.userId, hospital, date, amount || 0, status || 'Paid', recordId || null]
+    );
+    res.json({ id: result.lastID, userId: req.userId, hospital, date, amount: amount || 0, status: status || 'Paid', recordId: recordId || null });
+});
+
+app.put('/api/payments/:id', auth, async (req, res) => {
+    const { status, amount } = req.body;
+    const sets = [];
+    const params = [];
+    if (status !== undefined) { sets.push('status = ?'); params.push(status); }
+    if (amount !== undefined) { sets.push('amount = ?'); params.push(amount); }
+    if (sets.length === 0) return res.status(400).json({ error: 'Nothing to update.' });
+    params.push(req.params.id, req.userId);
+    await dbRun(`UPDATE payments SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`, params);
+    res.json({ success: true });
+});
+
+// ── Discrepancies ──
+
+app.get('/api/discrepancies', auth, async (req, res) => {
+    const rows = await dbAll(
+        'SELECT id, hospital_name as hospital, expected_amount as expectedAmount, received_amount as receivedAmount, difference, status FROM discrepancies WHERE user_id = ? ORDER BY id DESC',
+        [req.userId]
+    );
+    res.json(rows);
+});
+
+app.put('/api/discrepancies/:id', auth, async (req, res) => {
+    const { status } = req.body;
+    await dbRun(
+        'UPDATE discrepancies SET status = ? WHERE id = ? AND user_id = ?',
+        [status, req.params.id, req.userId]
+    );
     res.json({ success: true });
 });
 

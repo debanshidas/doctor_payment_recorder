@@ -1,6 +1,8 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useCallback } from 'react'
 import { Eye, EyeOff, LayoutDashboard, Building2, FileText, IndianRupee, AlertTriangle, LogOut, Menu, X, ArrowUpRight, BarChart3, Settings, Plus, User } from 'lucide-react'
 import './App.css'
+
+const API = '/api'
 
 const formatMoney = (value) =>
   new Intl.NumberFormat('en-IN', {
@@ -9,32 +11,34 @@ const formatMoney = (value) =>
     maximumFractionDigits: 0,
   }).format(Number(value || 0))
 
-async function hashPassword(password) {
-  const msgUint8 = new TextEncoder().encode(password);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+async function api(path, opts = {}) {
+  const session = JSON.parse(localStorage.getItem('doctrack_session') || '{}')
+  const headers = { 'Content-Type': 'application/json', ...opts.headers }
+  if (session.user?.id) headers['x-user-id'] = String(session.user.id)
+  const res = await fetch(`${API}${path}`, { ...opts, headers })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.error || `Request failed: ${res.status}`)
+  }
+  return res.json()
 }
 
-function usePersistentState(key, defaultValue) {
-  const [state, setState] = useState(() => {
-    try {
-      const item = localStorage.getItem(key);
-      return item ? JSON.parse(item) : defaultValue;
-    } catch (error) {
-      return defaultValue;
-    }
-  });
-
-  useEffect(() => {
-    localStorage.setItem(key, JSON.stringify(state));
-  }, [key, state]);
-
-  return [state, setState];
-}
 function App() {
-  const [users, setUsers] = usePersistentState('doctrack_users', []);
-  const [session, setSession] = usePersistentState('doctrack_session', { loggedIn: false, role: 'doctor', user: null });
+  const [session, setSessionState] = useState(() => {
+    try {
+      const saved = localStorage.getItem('doctrack_session')
+      if (saved) return JSON.parse(saved)
+      const remembered = localStorage.getItem('doctorSession')
+      if (remembered) return JSON.parse(remembered)
+    } catch {}
+    return { loggedIn: false, role: 'doctor', user: null }
+  })
+
+  const setSession = useCallback((val) => {
+    setSessionState(val)
+    localStorage.setItem('doctrack_session', JSON.stringify(val))
+  }, [])
+
   const [activePage, setActivePage] = useState('Dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -42,23 +46,43 @@ function App() {
   const [showLoginPassword, setShowLoginPassword] = useState(false)
   const [showSignupPassword, setShowSignupPassword] = useState(false)
   const [showSignupConfirmPassword, setShowSignupConfirmPassword] = useState(false)
-  
+
   const [authView, setAuthView] = useState('login')
   const [loginForm, setLoginForm] = useState({ username: '', password: '' })
   const [loginError, setLoginError] = useState('')
   const [signupForm, setSignupForm] = useState({ username: '', password: '', confirmPassword: '' })
   const [signupError, setSignupError] = useState('')
 
-  const [hospitals, setHospitals] = usePersistentState('doctrack_hospitals', []);
-  const [records, setRecords] = usePersistentState('doctrack_records', []);
-  const [payments, setPayments] = usePersistentState('doctrack_payments', []);
-  const [discrepancies, setDiscrepancies] = usePersistentState('doctrack_discrepancies', []);
+  const [hospitals, setHospitals] = useState([])
+  const [records, setRecords] = useState([])
+  const [payments, setPayments] = useState([])
+  const [discrepancies, setDiscrepancies] = useState([])
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [viewState, setViewState] = useState('list')
 
-  const myHospitals = hospitals.filter(h => h.userId === session.user?.username)
-  const myRecords = records.filter(r => r.userId === session.user?.username)
-  const myPayments = payments.filter(p => p.userId === session.user?.username)
+  const loadData = useCallback(async () => {
+    if (!session.loggedIn || !session.user?.id) return
+    try {
+      const [h, r, p, d] = await Promise.all([
+        api('/hospitals'),
+        api('/records'),
+        api('/payments'),
+        api('/discrepancies'),
+      ])
+      setHospitals(h)
+      setRecords(r)
+      setPayments(p)
+      setDiscrepancies(d)
+    } catch (err) {
+      console.error('Failed to load data:', err)
+    }
+  }, [session.loggedIn, session.user?.id])
+
+  useEffect(() => { loadData() }, [loadData])
+
+  const myHospitals = hospitals.filter(h => h.userId === session.user?.id || h.userId === session.user?.username)
+  const myRecords = records.filter(r => r.userId === session.user?.id || r.userId === session.user?.username)
+  const myPayments = payments.filter(p => p.userId === session.user?.id || p.userId === session.user?.username)
   const myDiscrepancies = discrepancies.filter(d => {
     const parentPayment = myPayments.find(p => p.hospital === d.hospital)
     return parentPayment ? true : false
@@ -123,14 +147,16 @@ function App() {
 
 
 
-  const handleLogin = (event) => {
+  const handleLogin = async (event) => {
     event.preventDefault()
     const username = loginForm.username.trim()
     const password = loginForm.password.trim()
 
-    const user = users.find(u => (u.username === username || u.email === username) && u.password === password)
-    
-    if (user) {
+    try {
+      const user = await api('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ username, password }),
+      })
       const newSession = { loggedIn: true, role: user.role, user }
       setSession(newSession)
       if (rememberMe) {
@@ -140,16 +166,16 @@ function App() {
       }
       setActivePage('Dashboard')
       setLoginError('')
-      return
+    } catch (err) {
+      setLoginError(err.message || 'Invalid username or password.')
     }
-
-    setLoginError('Invalid username or password.')
   }
 
-  const handleSignup = (event) => {
+  const handleSignup = async (event) => {
     event.preventDefault()
-    const name = signupForm.name.trim()
-    const email = signupForm.email.trim()
+    const name = signupForm.name?.trim()
+    const email = signupForm.email?.trim()
+    const username = email
     const password = signupForm.password.trim()
     const confirmPassword = signupForm.confirmPassword.trim()
 
@@ -159,26 +185,25 @@ function App() {
     if (password.length < 6) return setSignupError('Password must be at least 6 characters long.')
     if (password !== confirmPassword) return setSignupError('Passwords do not match.')
 
-    const existingUser = users.find(u => u.email === email || u.username === email)
-    if (existingUser) {
-      return setSignupError('An account with this email already exists. Please log in instead.')
+    try {
+      await api('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ username, email, name, password }),
+      })
+      setAuthView('success')
+    } catch (err) {
+      setSignupError(err.message || 'Registration failed.')
     }
-
-    const newUser = {
-      username: email,
-      email,
-      password,
-      name,
-      role: 'doctor'
-    }
-
-    setUsers([...users, newUser])
-    setAuthView('success')
   }
 
   const handleLogout = () => {
     localStorage.removeItem('doctorSession')
-    setSession({ loggedIn: false, role: 'doctor', user: null })
+    localStorage.removeItem('doctrack_session')
+    setSessionState({ loggedIn: false, role: 'doctor', user: null })
+    setHospitals([])
+    setRecords([])
+    setPayments([])
+    setDiscrepancies([])
     setActivePage('Dashboard')
     setSidebarOpen(false)
     setLoginForm({ username: '', password: '' })
@@ -207,138 +232,182 @@ function App() {
     }))
   }
 
-  const handleHospitalSave = (event) => {
+  const handleHospitalSave = async (event) => {
     event.preventDefault()
     if (!hospitalForm.name.trim()) return
 
-    const newHospital = {
-      id: Date.now(),
-      userId: session.user.username,
-      name: hospitalForm.name.trim(),
-      location: hospitalForm.location || 'Bangalore',
-      services: hospitalForm.services.length
-        ? hospitalForm.services
-        : [{ name: hospitalForm.serviceName.trim() || 'Consultation', rate: Number(hospitalForm.serviceRate || 0) }],
+    try {
+      const newHospital = await api('/hospitals', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: hospitalForm.name.trim(),
+          location: hospitalForm.location || 'Bangalore',
+          services: hospitalForm.services.length
+            ? hospitalForm.services
+            : [{ name: hospitalForm.serviceName.trim() || 'Consultation', rate: Number(hospitalForm.serviceRate || 0) }],
+        }),
+      })
+
+      setHospitals((current) => [newHospital, ...current])
+      setRecordForm((current) => ({
+        ...current,
+        hospital: newHospital.name,
+        service: newHospital.services[0]?.name || current.service,
+      }))
+      setPaymentForm((current) => ({
+        ...current,
+        hospital: newHospital.name,
+      }))
+
+      setHospitalForm({
+        name: '',
+        location: 'Bangalore',
+        serviceName: '',
+        serviceRate: '1000',
+        services: [{ name: 'Consultation', rate: 1000 }],
+      })
+      setViewState('success')
+    } catch (err) {
+      console.error('Failed to save hospital:', err)
     }
-
-    setHospitals((current) => [newHospital, ...current])
-    setRecordForm((current) => ({
-      ...current,
-      hospital: newHospital.name,
-      service: newHospital.services[0]?.name || current.service,
-    }))
-    setPaymentForm((current) => ({
-      ...current,
-      hospital: newHospital.name,
-    }))
-
-    setHospitalForm({
-      name: '',
-      location: 'Bangalore',
-      serviceName: '',
-      serviceRate: '1000',
-      services: [{ name: 'Consultation', rate: 1000 }],
-    })
-    setViewState('success')
   }
 
-  const handleRecordSave = (event) => {
+  const handleRecordSave = async (event) => {
     event.preventDefault()
-    setRecords((current) => [{
-      id: Date.now(),
-      userId: session.user.username,
-      hospital: recordForm.hospital,
-      date: recordForm.date,
-      service: recordForm.service,
-      cases: Number(recordForm.cases || 0),
-      expectedAmount: expectedValue,
-    }, ...current])
+    try {
+      const newRecord = await api('/records', {
+        method: 'POST',
+        body: JSON.stringify({
+          hospital: recordForm.hospital,
+          date: recordForm.date,
+          service: recordForm.service,
+          cases: Number(recordForm.cases || 0),
+          expectedAmount: expectedValue,
+        }),
+      })
+      setRecords((current) => [newRecord, ...current])
 
-    setRecordForm((current) => ({
-      ...current,
-      date: '2026-09-15',
-      service: selectedHospital?.services[0]?.name || 'Consultation',
-      cases: '5',
-    }))
-    setViewState('success')
+      setRecordForm((current) => ({
+        ...current,
+        date: new Date().toISOString().split('T')[0],
+        service: selectedHospital?.services[0]?.name || 'Consultation',
+        cases: '1',
+      }))
+      setViewState('success')
+    } catch (err) {
+      console.error('Failed to save record:', err)
+    }
   }
 
-  const handlePaymentSave = (event) => {
+  const handlePaymentSave = async (event) => {
     event.preventDefault()
-    setPayments((current) => [{
-      id: Date.now(),
-      userId: session.user.username,
-      hospital: paymentForm.hospital,
-      date: paymentForm.date,
-      amount: Number(paymentForm.amount || 0),
-      status: paymentForm.status,
-    }, ...current])
+    try {
+      const newPayment = await api('/payments', {
+        method: 'POST',
+        body: JSON.stringify({
+          hospital: paymentForm.hospital,
+          date: paymentForm.date,
+          amount: Number(paymentForm.amount || 0),
+          status: paymentForm.status,
+        }),
+      })
+      setPayments((current) => [newPayment, ...current])
 
-    setPaymentForm((current) => ({
-      ...current,
-      date: '2026-09-18',
-      amount: '15000',
-      status: 'Paid',
-    }))
+      setPaymentForm((current) => ({
+        ...current,
+        date: new Date().toISOString().split('T')[0],
+        amount: '',
+        status: 'Paid',
+      }))
+    } catch (err) {
+      console.error('Failed to save payment:', err)
+    }
   }
 
-  const handleRecordDelete = (recordId) => {
-    setRecords((current) => current.filter((record) => record.id !== recordId))
+  const handleRecordDelete = async (recordId) => {
+    try {
+      await api(`/records/${recordId}`, { method: 'DELETE' })
+      setRecords((current) => current.filter((record) => record.id !== recordId))
+    } catch (err) {
+      console.error('Failed to delete record:', err)
+    }
     setConfirmDelete(null)
   }
 
-  const handleHospitalDelete = (hospitalId) => {
+  const handleHospitalDelete = async (hospitalId) => {
     const hospital = hospitals.find((item) => item.id === hospitalId)
     if (!hospital) {
       setConfirmDelete(null)
       return
     }
 
-    setHospitals((current) => current.filter((item) => item.id !== hospitalId))
-    setRecords((current) => current.filter((record) => record.hospital !== hospital.name))
-    setPayments((current) => current.filter((payment) => payment.hospital !== hospital.name))
-    setDiscrepancies((current) => current.filter((item) => item.hospital !== hospital.name))
+    try {
+      await api(`/hospitals/${hospitalId}`, { method: 'DELETE' })
+      setHospitals((current) => current.filter((item) => item.id !== hospitalId))
+      setRecords((current) => current.filter((record) => record.hospital !== hospital.name))
+      setPayments((current) => current.filter((payment) => payment.hospital !== hospital.name))
+      setDiscrepancies((current) => current.filter((item) => item.hospital !== hospital.name))
+    } catch (err) {
+      console.error('Failed to delete hospital:', err)
+    }
     setConfirmDelete(null)
   }
 
-  const updateDiscrepancyStatus = (id, status) => {
-    setDiscrepancies((current) =>
-      current.map((item) => (item.id === id ? { ...item, status } : item)),
-    )
+  const updateDiscrepancyStatus = async (id, status) => {
+    try {
+      await api(`/discrepancies/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ status }),
+      })
+      setDiscrepancies((current) =>
+        current.map((item) => (item.id === id ? { ...item, status } : item)),
+      )
+    } catch (err) {
+      console.error('Failed to update discrepancy:', err)
+    }
   }
 
-  const handleStatusChange = (record, newStatus) => {
-    // Update the local record status so it appears in the UI
-    setRecords((current) =>
-      current.map((r) => (r.id === record.id ? { ...r, status: newStatus } : r))
-    )
+  const handleStatusChange = async (record, newStatus) => {
+    try {
+      await api(`/records/${record.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ status: newStatus }),
+      })
+      setRecords((current) =>
+        current.map((r) => (r.id === record.id ? { ...r, status: newStatus } : r))
+      )
 
-    // Update or create a payment to keep backend calculations intact
-    setPayments((current) => {
-      const existing = current.find((p) => p.recordId === record.id)
       let amount = 0
       if (newStatus === 'Paid' || newStatus === 'Resolved') amount = record.expectedAmount
       if (newStatus === 'Partially Paid') amount = record.expectedAmount / 2
 
+      const existing = payments.find((p) => p.recordId === record.id)
       if (existing) {
-        return current.map((p) =>
-          p.recordId === record.id ? { ...p, status: newStatus, amount } : p
+        await api(`/payments/${existing.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ status: newStatus, amount }),
+        })
+        setPayments((current) =>
+          current.map((p) =>
+            p.recordId === record.id ? { ...p, status: newStatus, amount } : p
+          )
         )
       } else {
-        return [
-          {
-            id: Date.now(),
-            userId: session.user.username,
-            recordId: record.id,
+        const newPayment = await api('/payments', {
+          method: 'POST',
+          body: JSON.stringify({
             hospital: record.hospital,
             date: record.date,
             amount,
             status: newStatus,
-          },
-          ...current,
-        ]
+            recordId: record.id,
+          }),
+        })
+        setPayments((current) => [newPayment, ...current])
       }
-    })
+    } catch (err) {
+      console.error('Failed to update status:', err)
+    }
   }
 
   const getGreeting = () => {
@@ -356,11 +425,11 @@ function App() {
             <div>
               <p className="text-sm text-neutral-500">Revenue overview</p>
               <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-                {getGreeting()}{session.user ? `, ${session.user.name.split(' ')[0]}` : ''}
+                {getGreeting()}{session.user ? `, ${session.user.name?.split(' ')[0] || session.user.username}` : ''}
               </h1>
             </div>
           </header>
-          
+
           <div className="card bg-white p-12 text-center" style={{ marginTop: '2rem' }}>
             <FileText size={48} className="text-neutral-300" style={{ margin: '0 auto', marginBottom: '1rem' }} />
             <h2 className="text-xl font-semibold mb-2">No transactions yet</h2>
@@ -379,7 +448,7 @@ function App() {
           <div>
             <p className="text-sm text-neutral-500">Revenue overview</p>
             <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-              {getGreeting()}{session.user ? `, ${session.user.name.split(' ')[0]}` : ''}
+              {getGreeting()}{session.user ? `, ${session.user.name?.split(' ')[0] || session.user.username}` : ''}
             </h1>
           </div>
           {session.role === 'doctor' && (
@@ -473,7 +542,7 @@ function App() {
               <label className="field"><span className="field-label">Service Name</span><input type="text" value={hospitalForm.serviceName} onChange={(event) => setHospitalForm({ ...hospitalForm, serviceName: event.target.value })} placeholder="Consultation" /></label>
               <label className="field"><span className="field-label">Service Rate (₹)</span><input type="number" min="0" value={hospitalForm.serviceRate} onChange={(event) => setHospitalForm({ ...hospitalForm, serviceRate: event.target.value })} placeholder="1000" /></label>
               <div className="field"><span className="field-label">&nbsp;</span><button type="button" className="secondary-btn" onClick={addService}>Add service</button></div>
-              
+
               <div className="field full-span form-actions" style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
                 <button type="button" className="secondary-btn" onClick={() => setViewState('list')}>← Back</button>
                 <button type="submit" className="primary-btn">Save Hospital & Continue →</button>
@@ -565,8 +634,8 @@ function App() {
     const totalRevenue = myRecords.reduce((sum, r) => sum + Number(r.expectedAmount), 0)
     const totalPending = totalRevenue - totalReceived
     const numPaid = myPayments.filter(p => p.status === 'Paid' || p.status === 'Resolved').length
-    const numPending = myRecords.length - numPaid // Approximation
-    
+    const numPending = myRecords.length - numPaid
+
     return (
     <section className="animate-fade-in">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
@@ -601,7 +670,7 @@ function App() {
           <span className="metric-value">{numPending}</span>
         </div>
       </div>
-      
+
       <div className="card bg-white">
         <div className="p-4 border-b">
           <h3 className="text-sm font-medium">Transaction Table</h3>
@@ -628,9 +697,9 @@ function App() {
                     <td>{record.date}</td>
                     <td>{formatMoney(record.expectedAmount)}</td>
                     <td>
-                      <select 
+                      <select
                         className="status-dropdown"
-                        value={currentStatus} 
+                        value={currentStatus}
                         onChange={(event) => handleStatusChange(record, event.target.value)}
                       >
                         <option value="Active">Active</option>
@@ -642,7 +711,7 @@ function App() {
                       </select>
                     </td>
                     <td>{relatedPayment ? relatedPayment.date : '-'}</td>
-                    <td>{relatedPayment ? `TRX-${relatedPayment.id.toString().slice(-6)}` : '-'}</td>
+                    <td>{relatedPayment ? `TRX-${String(relatedPayment.id).slice(-6)}` : '-'}</td>
                   </tr>
                 )
               })}
@@ -657,7 +726,7 @@ function App() {
     <>
       <div className="page-header"><div><p className="eyebrow">Follow-up</p><h1>Discrepancies</h1></div></div>
       <div className="panel"><div className="table-wrap"><table><thead><tr><th>Hospital</th><th>Expected</th><th>Received</th><th>Difference</th><th>Status</th><th>Action</th></tr></thead><tbody>{myDiscrepancies.map((item) => <tr key={item.id}><td>{item.hospital}</td><td>{formatMoney(item.expectedAmount)}</td><td>{formatMoney(item.receivedAmount)}</td><td>{formatMoney(item.difference)}</td><td><span className={`status-badge ${item.status.toLowerCase()}`}>{item.status}</span></td><td><select value={item.status} onChange={(event) => updateDiscrepancyStatus(item.id, event.target.value)}><option value="Open">Open</option><option value="Resolved">Resolved</option></select></td></tr>)}</tbody></table></div></div>
-      
+
       <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
         <button type="button" className="secondary-btn" onClick={() => setActivePage('My Payments')}>← Back to Payments</button>
         <button type="button" className="primary-btn" onClick={() => setActivePage('Dashboard')}>Done / Back to Dashboard</button>
@@ -672,7 +741,7 @@ function App() {
       hospitalMap[r.hospital].visits += 1
       hospitalMap[r.hospital].cases += Number(r.cases || 1)
     })
-    
+
     return (
       <section className="animate-fade-in">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
@@ -681,7 +750,7 @@ function App() {
             <p className="text-sm text-neutral-500 mt-1">Summary of your revenue and visits</p>
           </div>
         </div>
-        
+
         <div className="card bg-white" style={{ marginBottom: '24px' }}>
           <div className="p-4 border-b"><h3 className="text-sm font-medium">Hospital-wise Summary</h3></div>
           <div className="table-wrap">
@@ -708,16 +777,16 @@ function App() {
             <p className="text-sm text-neutral-500 mt-1">Manage your account preferences</p>
           </div>
         </div>
-        
+
         <div className="card bg-white p-6 max-w-2xl">
           <div className="flex items-center gap-4 mb-8 pb-8 border-b border-neutral-200">
             <div className="avatar"><User size={32} /></div>
             <div>
-              <h3 className="text-lg font-medium">{session.user?.username}</h3>
+              <h3 className="text-lg font-medium">{session.user?.name || session.user?.username}</h3>
               <p className="text-neutral-500">Role: {session.role}</p>
             </div>
           </div>
-          
+
           <h3 className="text-md font-medium mb-4">Account Actions</h3>
           <div className="flex flex-col gap-4">
             <button className="secondary-btn w-fit">Change Password</button>
@@ -788,6 +857,8 @@ function App() {
                   <p className="text-sm text-neutral-400 mt-2">Set up your account to manage your hospitals, services and payments.</p>
                 </div>
                 <form className="login-form" onSubmit={handleSignup}>
+                  <label className="field"><span className="field-label">Full Name</span><input type="text" value={signupForm.name || ''} onChange={(event) => setSignupForm({ ...signupForm, name: event.target.value })} placeholder="Your full name" /></label>
+                  <label className="field"><span className="field-label">Email</span><input type="email" value={signupForm.email || ''} onChange={(event) => setSignupForm({ ...signupForm, email: event.target.value })} placeholder="you@example.com" /></label>
                   <label className="field"><span className="field-label">Username</span><input type="text" value={signupForm.username} onChange={(event) => setSignupForm({ ...signupForm, username: event.target.value })} placeholder="Choose a username" /></label>
                   <label className="field">
                     <span className="field-label">Password</span>
