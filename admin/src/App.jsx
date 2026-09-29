@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { LayoutDashboard, Users, Building2, CreditCard, FileBarChart, ScrollText, LogOut, Shield, Eye, EyeOff, CheckCircle, XCircle, Clock } from 'lucide-react';
 
+const API = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '') + '/api';
+
 async function api(path, opts = {}) {
   const session = JSON.parse(localStorage.getItem('adminSession') || 'null');
   const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
   if (session?.id) headers['x-user-id'] = session.id;
-  const res = await fetch('/api' + path, { ...opts, headers });
+  const res = await fetch(API + path, { ...opts, headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `Request failed: ${res.status}`);

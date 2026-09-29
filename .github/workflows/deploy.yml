@@ -30,8 +30,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build app
+      - name: Build doctor app
         run: npm run build
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+
+      - name: Build admin app
+        run: npm ci --prefix admin && npm run build --prefix admin && cp -r admin/dist dist/admin
         env:
           VITE_API_URL: ${{ vars.VITE_API_URL }}
 
