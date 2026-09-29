@@ -9,166 +9,35 @@ const formatMoney = (value) =>
     maximumFractionDigits: 0,
   }).format(Number(value || 0))
 
-const hospitalsSeed = [
-  {
-    id: 1,
-    name: 'Kauvery Hospital',
-    location: 'Bangalore',
-    services: [
-      { name: 'Consultation', rate: 1000 },
-      { name: 'Procedure', rate: 4500 },
-      { name: 'Surgery', rate: 15000 },
-    ],
-  },
-  {
-    id: 2,
-    name: 'Apollo Hospital',
-    location: 'Bangalore',
-    services: [
-      { name: 'Consultation', rate: 1200 },
-      { name: 'Follow-up', rate: 700 },
-    ],
-  },
-]
-
-const recordsSeed = [
-  { id: 1, hospital: 'Kauvery Hospital', date: '2026-09-02', service: 'Consultation', cases: 5, expectedAmount: 5000 },
-  { id: 2, hospital: 'Apollo Hospital', date: '2026-09-05', service: 'Procedure', cases: 3, expectedAmount: 13500 },
-  { id: 3, hospital: 'Kauvery Hospital', date: '2026-09-08', service: 'Surgery', cases: 2, expectedAmount: 30000 },
-]
-
-const paymentsSeed = [
-  { id: 1, hospital: 'Kauvery Hospital', date: '2026-09-12', amount: 18000, status: 'Paid' },
-  { id: 2, hospital: 'Apollo Hospital', date: '2026-09-18', amount: 12000, status: 'Pending' },
-  { id: 3, hospital: 'Kauvery Hospital', date: '2026-09-20', amount: 9000, status: 'Partially Paid' },
-]
-
-const discrepanciesSeed = [
-  { id: 1, hospital: 'Kauvery Hospital', expectedAmount: 20000, receivedAmount: 12000, difference: 8000, status: 'Open' },
-  { id: 2, hospital: 'Apollo Hospital', expectedAmount: 18000, receivedAmount: 18000, difference: 0, status: 'Resolved' },
-]
-
-function AbstractRevenueVisual() {
-  return (
-    <div className="abstract-visual" aria-hidden="true">
-      <div className="visual-glow glow-one" />
-      <div className="visual-glow glow-two" />
-      <div className="visual-glow glow-three" />
-
-      <svg className="visual-svg" viewBox="0 0 760 820" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="panelGlow" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#ff9c4b" stopOpacity="0.42" />
-            <stop offset="100%" stopColor="#ff6b00" stopOpacity="0.06" />
-          </linearGradient>
-          <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#f8c39d" stopOpacity="0.2" />
-            <stop offset="40%" stopColor="#ff8a3d" stopOpacity="0.9" />
-            <stop offset="100%" stopColor="#ffd5b5" stopOpacity="0.4" />
-          </linearGradient>
-          <linearGradient id="nodeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#fff7f0" />
-            <stop offset="100%" stopColor="#ffb06a" />
-          </linearGradient>
-          <filter id="softGlow" x="-40%" y="-40%" width="180%" height="180%">
-            <feGaussianBlur stdDeviation="8" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-
-        <g opacity="0.95">
-          <path d="M85 640L220 430L310 515L310 640Z" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.12)" strokeWidth="1.2" />
-          <path d="M280 640L420 420L560 515L560 640Z" fill="rgba(255,255,255,0.025)" stroke="rgba(255,255,255,0.11)" strokeWidth="1.1" />
-          <path d="M500 640L640 470L705 520L705 640Z" fill="rgba(255,255,255,0.018)" stroke="rgba(255,255,255,0.1)" strokeWidth="1.1" />
-        </g>
-
-        <g opacity="0.9">
-          <path d="M230 205L260 180L286 205V270H230V205Z" fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" />
-          <path d="M435 170L466 145L500 170V250H435V170Z" fill="none" stroke="rgba(255,255,255,0.17)" strokeWidth="1.5" />
-          <path d="M590 218L620 198L647 218V300H590V218Z" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5" />
-        </g>
-
-        <g filter="url(#softGlow)">
-          <path d="M360 223C368 198 382 180 404 159C420 145 438 138 457 138C490 138 517 165 519 200C521 232 494 252 462 255L441 255C413 255 388 245 370 223Z" fill="rgba(255, 120, 30, 0.12)" opacity="0.8" />
-          <circle cx="449" cy="132" r="29" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.18)" strokeWidth="1.2" />
-          <path d="M423 158C435 166 449 170 464 170C480 170 491 165 500 156" fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="2.2" strokeLinecap="round" />
-          <path d="M385 271C407 250 429 236 449 236C487 236 523 261 541 301L572 378C582 402 578 433 558 448L543 459C528 470 505 465 493 451L454 410L410 452C396 466 370 467 353 452L338 439C320 424 316 398 327 378L385 271Z" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.22)" strokeWidth="1.5" />
-          <path d="M421 286C435 279 447 279 460 286" fill="none" stroke="rgba(255,255,255,0.24)" strokeWidth="2.4" strokeLinecap="round" />
-          <path d="M428 302H495" stroke="rgba(255,255,255,0.34)" strokeWidth="1.8" strokeLinecap="round" />
-          <path d="M411 328H516" stroke="rgba(255,255,255,0.25)" strokeWidth="1.8" strokeLinecap="round" />
-        </g>
-
-        <g fill="none" stroke="url(#lineGradient)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M128 232C189 202 214 197 252 201" opacity="0.8" />
-          <path d="M180 315C250 292 287 294 341 322" opacity="0.8" />
-          <path d="M452 304C512 298 563 312 609 334" opacity="0.8" />
-          <path d="M555 455C592 473 624 492 661 498" opacity="0.85" />
-          <path d="M255 473C305 448 337 442 372 450" opacity="0.7" />
-        </g>
-
-        <g>
-          <circle cx="128" cy="232" r="7" fill="url(#nodeGradient)" filter="url(#softGlow)" />
-          <circle cx="252" cy="201" r="7" fill="url(#nodeGradient)" filter="url(#softGlow)" />
-          <circle cx="180" cy="315" r="6" fill="url(#nodeGradient)" filter="url(#softGlow)" />
-          <circle cx="341" cy="322" r="6" fill="url(#nodeGradient)" filter="url(#softGlow)" />
-          <circle cx="452" cy="304" r="7" fill="url(#nodeGradient)" filter="url(#softGlow)" />
-          <circle cx="609" cy="334" r="6.5" fill="url(#nodeGradient)" filter="url(#softGlow)" />
-          <circle cx="555" cy="455" r="7" fill="url(#nodeGradient)" filter="url(#softGlow)" />
-          <circle cx="661" cy="498" r="7" fill="url(#nodeGradient)" filter="url(#softGlow)" />
-          <circle cx="255" cy="473" r="6.5" fill="url(#nodeGradient)" filter="url(#softGlow)" />
-          <circle cx="372" cy="450" r="6.5" fill="url(#nodeGradient)" filter="url(#softGlow)" />
-        </g>
-
-        <g opacity="0.9" fontSize="26" fontWeight="700" fill="rgba(255,255,255,0.8)" fontFamily="Inter, sans-serif">
-          <text x="89" y="462" transform="rotate(-12 89 462)">₹</text>
-          <text x="596" y="585" transform="rotate(18 596 585)">₹</text>
-          <text x="319" y="620" transform="rotate(-8 319 620)">₹</text>
-        </g>
-
-        <g stroke="rgba(255,255,255,0.26)" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.9">
-          <path d="M615 586L627 598L646 576" />
-          <path d="M300 548L315 562L338 538" />
-          <path d="M171 584L183 596L202 576" />
-        </g>
-
-        <g opacity="0.8">
-          <path d="M172 584H202" stroke="rgba(255,255,255,0.18)" strokeWidth="1.4" strokeLinecap="round" />
-          <path d="M300 548H339" stroke="rgba(255,255,255,0.18)" strokeWidth="1.4" strokeLinecap="round" />
-          <path d="M615 586H646" stroke="rgba(255,255,255,0.18)" strokeWidth="1.4" strokeLinecap="round" />
-        </g>
-
-        <g opacity="0.68" fill="none" stroke="rgba(255,255,255,0.11)" strokeWidth="1.2">
-          <path d="M110 655C205 629 243 625 317 660" />
-          <path d="M404 685C493 650 563 651 659 682" />
-          <path d="M250 700C300 685 348 683 399 701" />
-        </g>
-
-        <g opacity="0.42">
-          <rect x="280" y="175" width="86" height="220" rx="18" fill="url(#panelGlow)" />
-          <rect x="390" y="170" width="130" height="246" rx="20" fill="url(#panelGlow)" />
-        </g>
-      </svg>
-    </div>
-  )
+async function hashPassword(password) {
+  const msgUint8 = new TextEncoder().encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-function App() {
-  const [users, setUsers] = useState([
-    { username: 'admin2026', email: 'admin@example.com', password: 'admin@123', name: 'Admin User', role: 'admin' },
-    { username: 'doctor2026', email: 'doc@example.com', password: 'doc@123', name: 'Dr. Aisha Nair', role: 'doctor' }
-  ])
-  const [session, setSession] = useState(() => {
-    const saved = localStorage.getItem('doctorSession')
-    if (saved) {
-      try { return JSON.parse(saved) } catch (e) {}
+function usePersistentState(key, defaultValue) {
+  const [state, setState] = useState(() => {
+    try {
+      const item = localStorage.getItem(key);
+      return item ? JSON.parse(item) : defaultValue;
+    } catch (error) {
+      return defaultValue;
     }
-    return { loggedIn: false, role: 'doctor', user: null }
-  })
+  });
+
+  useEffect(() => {
+    localStorage.setItem(key, JSON.stringify(state));
+  }, [key, state]);
+
+  return [state, setState];
+}
+function App() {
+  const [users, setUsers] = usePersistentState('doctrack_users', []);
+  const [session, setSession] = usePersistentState('doctrack_session', { loggedIn: false, role: 'doctor', user: null });
   const [activePage, setActivePage] = useState('Dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [showLoginPassword, setShowLoginPassword] = useState(false)
   const [showSignupPassword, setShowSignupPassword] = useState(false)
@@ -177,20 +46,20 @@ function App() {
   const [authView, setAuthView] = useState('login')
   const [loginForm, setLoginForm] = useState({ username: '', password: '' })
   const [loginError, setLoginError] = useState('')
-  const [signupForm, setSignupForm] = useState({ name: '', email: '', password: '', confirmPassword: '' })
+  const [signupForm, setSignupForm] = useState({ username: '', password: '', confirmPassword: '' })
   const [signupError, setSignupError] = useState('')
 
-  const [hospitals, setHospitals] = useState(hospitalsSeed.map(h => ({ ...h, userId: 'doctor2026' })))
-  const [records, setRecords] = useState(recordsSeed.map(r => ({ ...r, userId: 'doctor2026' })))
-  const [payments, setPayments] = useState(paymentsSeed.map(p => ({ ...p, userId: 'doctor2026' })))
-  const [discrepancies, setDiscrepancies] = useState(discrepanciesSeed)
+  const [hospitals, setHospitals] = usePersistentState('doctrack_hospitals', []);
+  const [records, setRecords] = usePersistentState('doctrack_records', []);
+  const [payments, setPayments] = usePersistentState('doctrack_payments', []);
+  const [discrepancies, setDiscrepancies] = usePersistentState('doctrack_discrepancies', []);
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [viewState, setViewState] = useState('list')
 
-  const myHospitals = session.role === 'admin' ? hospitals : hospitals.filter(h => h.userId === session.user?.username)
-  const myRecords = session.role === 'admin' ? records : records.filter(r => r.userId === session.user?.username)
-  const myPayments = session.role === 'admin' ? payments : payments.filter(p => p.userId === session.user?.username)
-  const myDiscrepancies = session.role === 'admin' ? discrepancies : discrepancies.filter(d => {
+  const myHospitals = hospitals.filter(h => h.userId === session.user?.username)
+  const myRecords = records.filter(r => r.userId === session.user?.username)
+  const myPayments = payments.filter(p => p.userId === session.user?.username)
+  const myDiscrepancies = discrepancies.filter(d => {
     const parentPayment = myPayments.find(p => p.hospital === d.hospital)
     return parentPayment ? true : false
   })
@@ -204,19 +73,18 @@ function App() {
   })
 
   const [recordForm, setRecordForm] = useState({
-    hospital: hospitalsSeed[0].name,
-    date: '2026-09-15',
-    service: hospitalsSeed[0].services[0].name,
-    cases: '5',
+    hospital: '',
+    date: new Date().toISOString().split('T')[0],
+    service: '',
+    cases: '1',
   })
 
   const [paymentForm, setPaymentForm] = useState({
-    hospital: hospitalsSeed[0].name,
-    date: '2026-09-18',
-    amount: '15000',
+    hospital: '',
+    date: new Date().toISOString().split('T')[0],
+    amount: '',
     status: 'Paid',
   })
-
   const selectedHospital = myHospitals.find((hospital) => hospital.name === recordForm.hospital) || myHospitals[0] || { services: [] }
   const selectedRate = selectedHospital?.services.find((service) => service.name === recordForm.service)?.rate || 0
   const expectedValue = Number(recordForm.cases || 0) * selectedRate
@@ -692,43 +560,72 @@ function App() {
     )
   }
 
-  const renderPayments = () => (
+  const renderPayments = () => {
+    const totalReceived = myPayments.reduce((sum, p) => sum + Number(p.amount), 0)
+    const totalRevenue = myRecords.reduce((sum, r) => sum + Number(r.expectedAmount), 0)
+    const totalPending = totalRevenue - totalReceived
+    const numPaid = myPayments.filter(p => p.status === 'Paid' || p.status === 'Resolved').length
+    const numPending = myRecords.length - numPaid // Approximation
+    
+    return (
     <section className="animate-fade-in">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">My Payments</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Payment Overview</h1>
           <p className="text-sm text-neutral-500 mt-1">Track received and outstanding payments</p>
         </div>
-        {session.role === 'doctor' && (
-          <button className="primary-btn" onClick={() => { setActivePage('My Records'); setViewState('form') }}>
-            + Start New Record
-          </button>
-        )}
+        <button className="primary-btn" onClick={() => { setActivePage('My Records'); setViewState('form') }}>
+          + Start New Record
+        </button>
+      </div>
+
+      <div className="metrics-bar" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+        <div className="metric-item">
+          <span className="metric-label">Total Received</span>
+          <span className="metric-value success">{formatMoney(totalReceived)}</span>
+        </div>
+        <div className="metric-item">
+          <span className="metric-label">Total Pending</span>
+          <span className="metric-value warning">{formatMoney(totalPending)}</span>
+        </div>
+        <div className="metric-item">
+          <span className="metric-label">Total Revenue</span>
+          <span className="metric-value">{formatMoney(totalRevenue)}</span>
+        </div>
+        <div className="metric-item">
+          <span className="metric-label">Paid Trans.</span>
+          <span className="metric-value">{numPaid}</span>
+        </div>
+        <div className="metric-item">
+          <span className="metric-label">Pending Trans.</span>
+          <span className="metric-value">{numPending}</span>
+        </div>
       </div>
       
       <div className="card bg-white">
         <div className="p-4 border-b">
-          <h3 className="text-sm font-medium">Active Cases</h3>
+          <h3 className="text-sm font-medium">Transaction Table</h3>
         </div>
         <div className="table-wrap">
           <table className="clean-table">
             <thead>
               <tr>
                 <th>Hospital</th>
-                <th>Date</th>
-                <th>Service</th>
-                <th>Expected Amount</th>
+                <th>Visit Date</th>
+                <th>Amount</th>
                 <th>Status</th>
+                <th>Payment Date</th>
+                <th>Transaction Ref</th>
               </tr>
             </thead>
             <tbody>
               {myRecords.map((record) => {
                 const currentStatus = record.status || 'Active'
+                const relatedPayment = myPayments.find(p => p.recordId === record.id)
                 return (
                   <tr key={record.id}>
                     <td>{record.hospital}</td>
                     <td>{record.date}</td>
-                    <td>{record.service}</td>
                     <td>{formatMoney(record.expectedAmount)}</td>
                     <td>
                       <select 
@@ -744,6 +641,8 @@ function App() {
                         <option value="Resolved">Resolved</option>
                       </select>
                     </td>
+                    <td>{relatedPayment ? relatedPayment.date : '-'}</td>
+                    <td>{relatedPayment ? `TRX-${relatedPayment.id.toString().slice(-6)}` : '-'}</td>
                   </tr>
                 )
               })}
@@ -751,41 +650,8 @@ function App() {
           </table>
         </div>
       </div>
-
-      <div className="card bg-white" style={{ marginTop: '24px' }}>
-        <div className="p-4 border-b">
-          <h3 className="text-sm font-medium">Ledger (Auto-Synced)</h3>
-        </div>
-        <div className="table-wrap">
-          <table className="clean-table">
-            <thead>
-              <tr>
-                <th>Hospital</th>
-                <th>Date</th>
-                <th>Amount</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {myPayments.map((payment) => (
-                <tr key={payment.id}>
-                  <td>{payment.hospital}</td>
-                  <td>{payment.date}</td>
-                  <td>{formatMoney(payment.amount)}</td>
-                  <td><span className={`status-badge ${payment.status.toLowerCase().replace(/\s+/g, '-')}`}>{payment.status}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      
-      <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-        <button type="button" className="secondary-btn" onClick={() => setActivePage('Dashboard')}>← Back to Dashboard</button>
-        <button type="button" className="primary-btn" onClick={() => setActivePage('Discrepancies')}>Next: Reconciliation →</button>
-      </div>
     </section>
-  )
+  )}
 
   const renderDiscrepancies = () => (
     <>
@@ -798,6 +664,70 @@ function App() {
       </div>
     </>
   )
+  const renderReports = () => {
+    const hospitalMap = {}
+    myRecords.forEach(r => {
+      if(!hospitalMap[r.hospital]) hospitalMap[r.hospital] = { revenue: 0, visits: 0, cases: 0 }
+      hospitalMap[r.hospital].revenue += Number(r.expectedAmount)
+      hospitalMap[r.hospital].visits += 1
+      hospitalMap[r.hospital].cases += Number(r.cases || 1)
+    })
+    
+    return (
+      <section className="animate-fade-in">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Reports</h1>
+            <p className="text-sm text-neutral-500 mt-1">Summary of your revenue and visits</p>
+          </div>
+        </div>
+        
+        <div className="card bg-white" style={{ marginBottom: '24px' }}>
+          <div className="p-4 border-b"><h3 className="text-sm font-medium">Hospital-wise Summary</h3></div>
+          <div className="table-wrap">
+            <table className="clean-table">
+              <thead><tr><th>Hospital</th><th>Revenue</th><th>Visits</th><th>Cases</th></tr></thead>
+              <tbody>
+                {Object.keys(hospitalMap).map(h => (
+                  <tr key={h}><td>{h}</td><td>{formatMoney(hospitalMap[h].revenue)}</td><td>{hospitalMap[h].visits}</td><td>{hospitalMap[h].cases}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  const renderSettings = () => {
+    return (
+      <section className="animate-fade-in">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+            <p className="text-sm text-neutral-500 mt-1">Manage your account preferences</p>
+          </div>
+        </div>
+        
+        <div className="card bg-white p-6 max-w-2xl">
+          <div className="flex items-center gap-4 mb-8 pb-8 border-b border-neutral-200">
+            <div className="avatar"><User size={32} /></div>
+            <div>
+              <h3 className="text-lg font-medium">{session.user?.username}</h3>
+              <p className="text-neutral-500">Role: {session.role}</p>
+            </div>
+          </div>
+          
+          <h3 className="text-md font-medium mb-4">Account Actions</h3>
+          <div className="flex flex-col gap-4">
+            <button className="secondary-btn w-fit">Change Password</button>
+            <button className="danger-btn w-fit" onClick={handleLogout}>Logout</button>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
 
   const renderPage = () => {
     if (activePage === 'Dashboard') return renderDashboard()
@@ -805,30 +735,31 @@ function App() {
     if (activePage === 'My Records') return renderRecords()
     if (activePage === 'My Payments') return renderPayments()
     if (activePage === 'Discrepancies') return renderDiscrepancies()
+    if (activePage === 'Reports') return renderReports()
+    if (activePage === 'Settings') return renderSettings()
     return renderDashboard()
   }
 
   if (!session.loggedIn) {
     return (
       <div className="login-shell">
-        <div className="auth-panel">
-          <div className="login-visual">
-            <AbstractRevenueVisual />
-          </div>
+        <div className="auth-panel single-col">
           <div className="login-card">
             {authView === 'login' && (
               <>
                 <div className="login-header">
-                  <p className="eyebrow neutral">Secure access</p>
-                  <h1>Doctor Revenue Tracking</h1>
+                  <img src="doctrack-logo.png" alt="DocTrack" className="login-logo" style={{ objectFit: 'contain' }} />
+                  <p className="eyebrow neutral" style={{ marginTop: '12px' }}>Secure access</p>
+                  <h1>DocTrack</h1>
+                  <p className="text-sm text-neutral-400 mt-2">Track Visits. Manage Revenue.</p>
                 </div>
                 <form className="login-form" onSubmit={handleLogin}>
-                  <label className="field"><span className="field-label">Username or Email</span><input type="text" value={loginForm.username} onChange={(event) => setLoginForm({ ...loginForm, username: event.target.value })} placeholder="Enter email" /></label>
+                  <label className="field"><span className="field-label">Username</span><input type="text" value={loginForm.username} onChange={(event) => setLoginForm({ ...loginForm, username: event.target.value })} placeholder="Enter username" /></label>
                   <label className="field">
                     <span className="field-label">Password</span>
-                    <div className="relative">
-                      <input type={showLoginPassword ? "text" : "password"} value={loginForm.password} onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })} placeholder="Enter password" style={{ width: '100%' }} />
-                      <button type="button" onClick={() => setShowLoginPassword(!showLoginPassword)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }} className="text-neutral-400">
+                    <div className="relative" style={{ position: 'relative' }}>
+                      <input type={showLoginPassword ? "text" : "password"} value={loginForm.password} onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })} placeholder="Enter password" style={{ width: '100%', paddingRight: '40px' }} />
+                      <button type="button" onClick={() => setShowLoginPassword(!showLoginPassword)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }} className="text-neutral-400">
                         {showLoginPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
                     </div>
@@ -845,34 +776,33 @@ function App() {
                     Don't have an account? Create an account
                   </button>
                 </div>
-                <div className="login-note"><strong>Demo accounts</strong><p>Doctor: doctor2026 / doc@123</p><p>Admin: admin2026 / admin@123</p></div>
               </>
             )}
 
             {authView === 'signup' && (
               <>
                 <div className="login-header">
+                  <img src="doctrack-logo.png" alt="DocTrack" className="login-logo" style={{ objectFit: 'contain' }} />
                   <p className="eyebrow neutral">Get Started</p>
                   <h1>Create your account</h1>
                   <p className="text-sm text-neutral-400 mt-2">Set up your account to manage your hospitals, services and payments.</p>
                 </div>
                 <form className="login-form" onSubmit={handleSignup}>
-                  <label className="field"><span className="field-label">Full Name</span><input type="text" value={signupForm.name} onChange={(event) => setSignupForm({ ...signupForm, name: event.target.value })} placeholder="John Doe" /></label>
-                  <label className="field"><span className="field-label">Email Address</span><input type="email" value={signupForm.email} onChange={(event) => setSignupForm({ ...signupForm, email: event.target.value })} placeholder="doctor@example.com" /></label>
+                  <label className="field"><span className="field-label">Username</span><input type="text" value={signupForm.username} onChange={(event) => setSignupForm({ ...signupForm, username: event.target.value })} placeholder="Choose a username" /></label>
                   <label className="field">
                     <span className="field-label">Password</span>
-                    <div className="relative">
-                      <input type={showSignupPassword ? "text" : "password"} value={signupForm.password} onChange={(event) => setSignupForm({ ...signupForm, password: event.target.value })} placeholder="Create a strong password" style={{ width: '100%' }} />
-                      <button type="button" onClick={() => setShowSignupPassword(!showSignupPassword)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }} className="text-neutral-400">
+                    <div className="relative" style={{ position: 'relative' }}>
+                      <input type={showSignupPassword ? "text" : "password"} value={signupForm.password} onChange={(event) => setSignupForm({ ...signupForm, password: event.target.value })} placeholder="Create a strong password" style={{ width: '100%', paddingRight: '40px' }} />
+                      <button type="button" onClick={() => setShowSignupPassword(!showSignupPassword)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }} className="text-neutral-400">
                         {showSignupPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
                     </div>
                   </label>
                   <label className="field">
                     <span className="field-label">Confirm Password</span>
-                    <div className="relative">
-                      <input type={showSignupConfirmPassword ? "text" : "password"} value={signupForm.confirmPassword} onChange={(event) => setSignupForm({ ...signupForm, confirmPassword: event.target.value })} placeholder="Confirm password" style={{ width: '100%' }} />
-                      <button type="button" onClick={() => setShowSignupConfirmPassword(!showSignupConfirmPassword)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }} className="text-neutral-400">
+                    <div className="relative" style={{ position: 'relative' }}>
+                      <input type={showSignupConfirmPassword ? "text" : "password"} value={signupForm.confirmPassword} onChange={(event) => setSignupForm({ ...signupForm, confirmPassword: event.target.value })} placeholder="Confirm password" style={{ width: '100%', paddingRight: '40px' }} />
+                      <button type="button" onClick={() => setShowSignupConfirmPassword(!showSignupConfirmPassword)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }} className="text-neutral-400">
                         {showSignupConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
                     </div>
@@ -892,7 +822,7 @@ function App() {
               <div className="text-center p-6">
                 <h3 className="text-2xl font-semibold text-success mb-2">✅ Account created successfully</h3>
                 <p className="text-neutral-400 mb-6">You can now log in using your new credentials.</p>
-                <button className="primary-btn full-width-btn" onClick={() => { setAuthView('login'); setSignupForm({ name: '', email: '', password: '', confirmPassword: '' }); }}>
+                <button className="primary-btn full-width-btn" onClick={() => { setAuthView('login'); setSignupForm({ username: '', password: '', confirmPassword: '' }); }}>
                   Go to Login
                 </button>
               </div>
@@ -905,36 +835,32 @@ function App() {
 
   return (
     <>
-      <div className="app-shell">
-        <button type="button" className="mobile-toggle flex items-center justify-center" aria-label="Toggle menu" onClick={() => setSidebarOpen((value) => !value)}>
+      <div className="app-shell" style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
+        <button type="button" className="mobile-toggle flex items-center justify-center" aria-label="Toggle menu" onClick={() => setSidebarCollapsed(!sidebarCollapsed)} style={{ position: 'fixed', left: '16px', top: '16px', zIndex: 50, background: 'white', borderRadius: '8px', padding: '8px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
           <Menu size={24} className="text-neutral-900" />
         </button>
-        <aside className={sidebarOpen ? 'sidebar open' : 'sidebar'}>
-          <div className="brand-block">
-            <div className="brand-mark">VD</div>
-            <div>
-              <p className="eyebrow neutral">{session.role === 'admin' ? 'Admin' : 'Doctor'}</p>
-              <h2>Revenue Ledger</h2>
+        <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`} style={{ width: sidebarCollapsed ? '0px' : '250px', overflow: 'hidden', transition: 'width 0.3s ease', background: '#1e293b', color: '#f8fafc', padding: sidebarCollapsed ? '0' : '20px 16px', height: '100vh', position: 'sticky', top: 0 }}>
+          <div className="brand-block" style={{ opacity: sidebarCollapsed ? 0 : 1, transition: 'opacity 0.2s', marginTop: '40px' }}>
+            <div className="brand-inner">
+              <img src="doctrack-logo.png" alt="" className="sidebar-logo" style={{ objectFit: 'contain' }} />
+              <div className="brand-text">
+                <span className="brand-name">DocTrack</span>
+                <span className="brand-tagline">Manage Revenue</span>
+              </div>
             </div>
-            {sidebarOpen && (
-               <button className="md:hidden ml-auto p-1 bg-transparent border-0 text-neutral-300" onClick={() => setSidebarOpen(false)}>
-                 <X size={24} />
-               </button>
-            )}
           </div>
-          <nav className="sidebar-nav" aria-label="Sidebar navigation">
-            <button type="button" className={activePage === 'Dashboard' ? 'nav-item active' : 'nav-item'} onClick={() => { setActivePage('Dashboard'); setViewState('list'); setSidebarOpen(false) }}><span className="nav-icon"><LayoutDashboard size={20} /></span>Dashboard</button>
-            <button type="button" className={activePage === 'My Hospitals' ? 'nav-item active' : 'nav-item'} onClick={() => { setActivePage('My Hospitals'); setViewState('list'); setSidebarOpen(false) }}><span className="nav-icon"><Building2 size={20} /></span>Hospitals</button>
-            <button type="button" className={activePage === 'My Records' ? 'nav-item active' : 'nav-item'} onClick={() => { setActivePage('My Records'); setViewState('list'); setSidebarOpen(false) }}><span className="nav-icon"><FileText size={20} /></span>Services / Visits</button>
-            <button type="button" className={activePage === 'My Payments' ? 'nav-item active' : 'nav-item'} onClick={() => { setActivePage('My Payments'); setViewState('list'); setSidebarOpen(false) }}><span className="nav-icon"><IndianRupee size={20} /></span>My Payments</button>
-            <button type="button" className={activePage === 'Discrepancies' ? 'nav-item active' : 'nav-item'} onClick={() => { setActivePage('Discrepancies'); setViewState('list'); setSidebarOpen(false) }}><span className="nav-icon"><AlertTriangle size={20} /></span>Discrepancies</button>
-            <button type="button" className="nav-item"><span className="nav-icon"><BarChart3 size={20} /></span>Reports</button>
-            <button type="button" className="nav-item"><span className="nav-icon"><Settings size={20} /></span>Settings</button>
+          <nav className="sidebar-nav" aria-label="Sidebar navigation" style={{ opacity: sidebarCollapsed ? 0 : 1, transition: 'opacity 0.2s' }}>
+            <button type="button" className={activePage === 'Dashboard' ? 'nav-item active' : 'nav-item'} onClick={() => { setActivePage('Dashboard'); setViewState('list'); }}><span className="nav-icon"><LayoutDashboard size={20} /></span>Dashboard</button>
+            <button type="button" className={activePage === 'My Hospitals' ? 'nav-item active' : 'nav-item'} onClick={() => { setActivePage('My Hospitals'); setViewState('list'); }}><span className="nav-icon"><Building2 size={20} /></span>Hospitals</button>
+            <button type="button" className={activePage === 'My Records' ? 'nav-item active' : 'nav-item'} onClick={() => { setActivePage('My Records'); setViewState('list'); }}><span className="nav-icon"><FileText size={20} /></span>Visits</button>
+            <button type="button" className={activePage === 'My Payments' ? 'nav-item active' : 'nav-item'} onClick={() => { setActivePage('My Payments'); setViewState('list'); }}><span className="nav-icon"><IndianRupee size={20} /></span>Payments</button>
+            <button type="button" className={activePage === 'Discrepancies' ? 'nav-item active' : 'nav-item'} onClick={() => { setActivePage('Discrepancies'); setViewState('list'); }}><span className="nav-icon"><AlertTriangle size={20} /></span>Discrepancies</button>
+            <button type="button" className={activePage === 'Reports' ? 'nav-item active' : 'nav-item'} onClick={() => { setActivePage('Reports'); }}><span className="nav-icon"><BarChart3 size={20} /></span>Reports</button>
+            <button type="button" className={activePage === 'Settings' ? 'nav-item active' : 'nav-item'} onClick={() => { setActivePage('Settings'); }}><span className="nav-icon"><Settings size={20} /></span>Settings</button>
             <button type="button" className="nav-item logout-item" onClick={handleLogout}><span className="nav-icon"><LogOut size={20} /></span>Logout</button>
           </nav>
         </aside>
-        {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
-        <main className="content-area">{renderPage()}</main>
+        <main className="content-area" style={{ flex: 1, padding: '28px 28px 46px', maxWidth: sidebarCollapsed ? '100vw' : 'calc(100vw - 250px)', transition: 'max-width 0.3s ease', paddingTop: '70px' }}>{renderPage()}</main>
       </div>
 
       {confirmDelete && (
