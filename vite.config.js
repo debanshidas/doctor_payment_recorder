@@ -6,7 +6,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/api': 'http://localhost:3001'
+      '/api': 'http://localhost:3001',
+      '/doctor_payment_recorder/api': {
+        target: 'http://localhost:3001',
+        rewrite: (path) => path.replace(/^\/doctor_payment_recorder/, '')
+      }
     }
   }
 })
