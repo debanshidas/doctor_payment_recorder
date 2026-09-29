@@ -110,6 +110,21 @@ function initDb() {
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY(hospital_id) REFERENCES hospitals(id) ON DELETE CASCADE
         )`);
+
+        db.run(`ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'`, () => {});
+
+        db.run(`CREATE TABLE IF NOT EXISTS audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            admin_id INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            target_type TEXT,
+            target_id INTEGER,
+            details TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(admin_id) REFERENCES users(id) ON DELETE CASCADE
+        )`);
+
+        db.run(`INSERT OR IGNORE INTO users (username, email, name, password_hash, role, status) VALUES ('admin', 'admin@doctrack.com', 'System Admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 'admin', 'active')`);
     });
 }
 

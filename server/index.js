@@ -39,6 +39,16 @@ const auth = (req, res, next) => {
     next();
 };
 
+const adminAuth = async (req, res, next) => {
+    const userId = req.headers['x-user-id'];
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    req.userId = parseInt(userId, 10);
+    const user = await dbGet('SELECT role, status FROM users WHERE id = ?', [req.userId]);
+    if (!user || user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+    if (user.status !== 'active') return res.status(403).json({ error: 'Account deactivated' });
+    next();
+};
+
 // ── Auth ──
 
 app.post('/api/auth/register', async (req, res) => {
@@ -537,6 +547,120 @@ app.put('/api/statements/:id', auth, async (req, res) => {
     } catch (err) {
         res.status(500).json({ error: 'Failed to update statement.' });
     }
+});
+
+// ── Admin Routes ──
+
+app.get('/api/admin/dashboard', adminAuth, async (req, res) => {
+    try {
+        const userCount = await dbGet('SELECT COUNT(*) as count FROM users');
+        const doctorCount = await dbGet("SELECT COUNT(*) as count FROM users WHERE role = 'doctor'");
+        const activeUsers = await dbGet("SELECT COUNT(*) as count FROM users WHERE status = 'active'");
+        const hospitalCount = await dbGet('SELECT COUNT(*) as count FROM hospitals');
+        const procedureCount = await dbGet('SELECT COUNT(*) as count FROM procedures');
+        const totalRevenue = await dbGet('SELECT COALESCE(SUM(gross_amount), 0) as total FROM procedures');
+        const totalPaid = await dbGet("SELECT COALESCE(SUM(actual_net), 0) as total FROM payouts WHERE status = 'Paid'");
+        const pendingPayouts = await dbGet("SELECT COUNT(*) as count FROM payouts WHERE status IN ('Pending', 'Under Review')");
+        const recentUsers = await dbAll('SELECT id, username, email, name, role, status, created_at, last_login FROM users ORDER BY created_at DESC LIMIT 5');
+        const recentPayouts = await dbAll(`
+            SELECT py.*, h.name as hospital_name, u.name as doctor_name
+            FROM payouts py JOIN hospitals h ON py.hospital_id = h.id JOIN users u ON py.user_id = u.id
+            ORDER BY py.created_at DESC LIMIT 10
+        `);
+        res.json({
+            totalDoctors: doctorCount.count, activeUsers: activeUsers.count,
+            totalHospitals: hospitalCount.count, totalProcedures: procedureCount.count,
+            totalRevenue: totalRevenue.total, totalPaid: totalPaid.total,
+            pendingPayouts: pendingPayouts.count, recentUsers, recentPayouts
+        });
+    } catch (err) { res.status(500).json({ error: 'Failed to load admin dashboard.' }); }
+});
+
+app.get('/api/admin/users', adminAuth, async (req, res) => {
+    try {
+        const users = await dbAll('SELECT id, username, email, name, role, status, created_at, last_login FROM users ORDER BY created_at DESC');
+        res.json(users);
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch users.' }); }
+});
+
+app.put('/api/admin/users/:id/status', adminAuth, async (req, res) => {
+    const { status } = req.body;
+    if (!['active', 'inactive'].includes(status)) return res.status(400).json({ error: 'Invalid status.' });
+    try {
+        await dbRun('UPDATE users SET status = ? WHERE id = ?', [status, req.params.id]);
+        await dbRun('INSERT INTO audit_logs (admin_id, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?)',
+            [req.userId, status === 'active' ? 'activate_user' : 'deactivate_user', 'user', req.params.id, `User status changed to ${status}`]);
+        const user = await dbGet('SELECT id, username, email, name, role, status, created_at, last_login FROM users WHERE id = ?', [req.params.id]);
+        res.json(user);
+    } catch (err) { res.status(500).json({ error: 'Failed to update user status.' }); }
+});
+
+app.get('/api/admin/hospitals', adminAuth, async (req, res) => {
+    try {
+        const hospitals = await dbAll(`SELECT h.*, u.name as doctor_name, u.username as doctor_username
+            FROM hospitals h JOIN users u ON h.user_id = u.id ORDER BY h.created_at DESC`);
+        res.json(hospitals);
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch hospitals.' }); }
+});
+
+app.get('/api/admin/payments', adminAuth, async (req, res) => {
+    try {
+        const payments = await dbAll(`SELECT py.*, h.name as hospital_name, u.name as doctor_name, u.username as doctor_username
+            FROM payouts py JOIN hospitals h ON py.hospital_id = h.id JOIN users u ON py.user_id = u.id
+            ORDER BY py.created_at DESC`);
+        res.json(payments);
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch payments.' }); }
+});
+
+app.put('/api/admin/payments/:id/approve', adminAuth, async (req, res) => {
+    try {
+        await dbRun("UPDATE payouts SET status = 'Paid' WHERE id = ?", [req.params.id]);
+        await dbRun('INSERT INTO audit_logs (admin_id, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?)',
+            [req.userId, 'approve_payment', 'payout', req.params.id, 'Payment approved']);
+        const payout = await dbGet(`SELECT py.*, h.name as hospital_name, u.name as doctor_name
+            FROM payouts py JOIN hospitals h ON py.hospital_id = h.id JOIN users u ON py.user_id = u.id WHERE py.id = ?`, [req.params.id]);
+        res.json(payout);
+    } catch (err) { res.status(500).json({ error: 'Failed to approve payment.' }); }
+});
+
+app.put('/api/admin/payments/:id/reject', adminAuth, async (req, res) => {
+    const { reason } = req.body;
+    try {
+        await dbRun("UPDATE payouts SET status = 'Rejected', notes = ? WHERE id = ?", [reason || 'Rejected by admin', req.params.id]);
+        await dbRun('INSERT INTO audit_logs (admin_id, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?)',
+            [req.userId, 'reject_payment', 'payout', req.params.id, reason || 'Payment rejected']);
+        const payout = await dbGet(`SELECT py.*, h.name as hospital_name, u.name as doctor_name
+            FROM payouts py JOIN hospitals h ON py.hospital_id = h.id JOIN users u ON py.user_id = u.id WHERE py.id = ?`, [req.params.id]);
+        res.json(payout);
+    } catch (err) { res.status(500).json({ error: 'Failed to reject payment.' }); }
+});
+
+app.get('/api/admin/reports', adminAuth, async (req, res) => {
+    const { month } = req.query;
+    try {
+        let dateFilter = '', params = [];
+        if (month) { dateFilter = "AND p.date LIKE ?"; params = [month + '%']; }
+        const proceduresByHospital = await dbAll(`
+            SELECT h.name as hospital_name, u.name as doctor_name, COUNT(p.id) as procedure_count,
+                COALESCE(SUM(p.gross_amount), 0) as total_billed, COALESCE(SUM(p.net_expected), 0) as total_expected,
+                COALESCE(SUM(p.tds_amount), 0) as total_tds
+            FROM procedures p JOIN hospitals h ON p.hospital_id = h.id JOIN users u ON p.user_id = u.id
+            WHERE 1=1 ${dateFilter} GROUP BY h.id, u.id ORDER BY total_billed DESC`, params);
+        const paymentSummary = await dbAll(`SELECT py.status, COUNT(*) as count, COALESCE(SUM(py.actual_net), 0) as total
+            FROM payouts py ${month ? "WHERE py.date LIKE ?" : ""} GROUP BY py.status`, month ? [month + '%'] : []);
+        const monthlyTrend = await dbAll(`SELECT strftime('%Y-%m', p.date) as month, COUNT(p.id) as procedures,
+            COALESCE(SUM(p.gross_amount), 0) as billed, COALESCE(SUM(p.net_expected), 0) as expected
+            FROM procedures p GROUP BY strftime('%Y-%m', p.date) ORDER BY month DESC LIMIT 12`);
+        res.json({ proceduresByHospital, paymentSummary, monthlyTrend });
+    } catch (err) { res.status(500).json({ error: 'Failed to generate reports.' }); }
+});
+
+app.get('/api/admin/audit-logs', adminAuth, async (req, res) => {
+    try {
+        const logs = await dbAll(`SELECT al.*, u.name as admin_name, u.username as admin_username
+            FROM audit_logs al JOIN users u ON al.admin_id = u.id ORDER BY al.created_at DESC LIMIT 200`);
+        res.json(logs);
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch audit logs.' }); }
 });
 
 const PORT = 3001;
