@@ -38,8 +38,8 @@ const EMPTY_PAYOUT = () => ({ hospital_id: '', date: today(), actual_net: '', ex
 const PAYOUT_STATUS_OPTIONS = [
   { value: 'Paid', label: 'Fully Paid', hint: 'Dues settled in full', color: 'green' },
   { value: 'Partially Paid', label: 'Partially Paid', hint: 'Part of the dues received', color: 'blue' },
-  { value: 'Under Review', label: 'Under Review', hint: 'Needs admin verification', color: 'amber' },
 ]
+const EDITABLE_PAYOUT = ['Paid', 'Partially Paid']
 const statusLabel = (value) => PAYOUT_STATUS_OPTIONS.find(o => o.value === value)?.label || value
 
 const StatusLegend = () => (
@@ -86,9 +86,9 @@ const formatDateTime = (d) => {
   return isNaN(dt) ? d : dt.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
-// Rejected payments are final (set by admin); every other status stays editable by the doctor.
-const PayoutStatus = ({ p, onChange }) => p.status === 'Rejected'
-  ? <><span className="badge red">Rejected</span>{p.notes && <div className="text-xs text-muted" style={{ marginTop: 4 }}>{p.notes}</div>}</>
+// Fully / Partially Paid are editable by the doctor; Rejected/Under Review (legacy/admin) show as a fixed badge.
+const PayoutStatus = ({ p, onChange }) => !EDITABLE_PAYOUT.includes(p.status)
+  ? <><span className={`badge ${payoutBadge(p.status)}`}>{p.status}</span>{p.status === 'Rejected' && p.notes && <div className="text-xs text-muted" style={{ marginTop: 4 }}>{p.notes}</div>}</>
   : (
     <select className={`status-select ${payoutBadge(p.status)}`} aria-label="Payment status" value={p.status} onChange={e => { const next = e.target.value; e.target.value = p.status; onChange(p, next) }}>
       {PAYOUT_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -506,6 +506,15 @@ function App() {
   }
 
   // ── Payouts ──
+
+  // Net expected this month for a hospital — used to pre-fill Total Payable on a partial payment.
+  const monthEarnedForHospital = (hid) => {
+    if (!hid) return 0
+    const now = new Date()
+    return procedures
+      .filter(p => p.hospital_id === Number(hid) && (() => { const d = new Date(`${p.date}T00:00:00`); return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() })())
+      .reduce((s, p) => s + p.net_expected, 0)
+  }
 
   const savePayout = async (e) => {
     e.preventDefault()
@@ -1236,7 +1245,7 @@ function App() {
                 <div className="form-grid">
                   <div className="form-field full">
                     <label className="form-label" htmlFor="p-hosp">Hospital</label>
-                    <select id="p-hosp" className="form-select" autoFocus={!editingPayout} disabled={!!editingPayout} value={payoutForm.hospital_id} onChange={e => setPayoutForm({ ...payoutForm, hospital_id: e.target.value })}>
+                    <select id="p-hosp" className="form-select" autoFocus={!editingPayout} disabled={!!editingPayout} value={payoutForm.hospital_id} onChange={e => { const hid = e.target.value; setPayoutForm(f => ({ ...f, hospital_id: hid, expected_net: f.status === 'Partially Paid' ? String(monthEarnedForHospital(hid) || '') : f.expected_net })) }}>
                       <option value="">Select hospital…</option>
                       {hospitals.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
                     </select>
@@ -1246,9 +1255,10 @@ function App() {
                   <div className="form-field full"><label className="form-label" htmlFor="p-ref">Reference</label><input id="p-ref" className="form-input" value={payoutForm.transaction_ref} onChange={e => setPayoutForm({ ...payoutForm, transaction_ref: e.target.value })} placeholder="UTR / NEFT / Cheque No." /></div>
                   <div className="form-field full">
                     <span className="form-label">Status</span>
-                    <div className="basis-toggle three" role="radiogroup" aria-label="Payment status">
+                    <div className="basis-toggle" role="radiogroup" aria-label="Payment status">
                       {PAYOUT_STATUS_OPTIONS.map(o => (
-                        <button key={o.value} type="button" role="radio" aria-checked={payoutForm.status === o.value} className={payoutForm.status === o.value ? 'active' : ''} onClick={() => setPayoutForm({ ...payoutForm, status: o.value })}>
+                        <button key={o.value} type="button" role="radio" aria-checked={payoutForm.status === o.value} className={payoutForm.status === o.value ? 'active' : ''}
+                          onClick={() => setPayoutForm(f => ({ ...f, status: o.value, expected_net: o.value === 'Partially Paid' ? (f.expected_net || String(monthEarnedForHospital(f.hospital_id) || '')) : f.expected_net }))}>
                           {o.label}<small>{o.hint}</small>
                         </button>
                       ))}
@@ -1258,6 +1268,7 @@ function App() {
                     <div className="form-field full">
                       <label className="form-label" htmlFor="p-total">Total Payable (₹)</label>
                       <input id="p-total" className="form-input" type="number" min="0" inputMode="numeric" value={payoutForm.expected_net} onChange={e => setPayoutForm({ ...payoutForm, expected_net: e.target.value })} placeholder="e.g. 50000" />
+                      <span className="form-hint">Pre-filled with this hospital's net expected for {new Date().toLocaleDateString('en-IN', { month: 'long' })} — edit if the total differs.</span>
                     </div>
                   )}
                 </div>
