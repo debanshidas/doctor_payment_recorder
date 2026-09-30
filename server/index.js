@@ -86,16 +86,91 @@ app.post('/api/auth/login', async (req, res) => {
 
 // ── Hospitals ──
 
+async function attachServices(hospitals, userId) {
+    const services = await dbAll('SELECT * FROM services WHERE user_id = ? ORDER BY id', [userId]);
+    const types = await dbAll('SELECT * FROM service_types WHERE user_id = ? ORDER BY id', [userId]);
+    for (const s of services) s.types = types.filter(t => t.service_id === s.id);
+    for (const h of hospitals) h.services = services.filter(s => s.hospital_id === h.id);
+    return hospitals;
+}
+
 app.get('/api/hospitals', auth, async (req, res) => {
     try {
-        const hospitals = await dbAll(
-            'SELECT * FROM hospitals WHERE user_id = ? ORDER BY id DESC',
-            [req.userId]
-        );
-        res.json(hospitals);
+        const hospitals = await dbAll('SELECT * FROM hospitals WHERE user_id = ? ORDER BY id DESC', [req.userId]);
+        res.json(await attachServices(hospitals, req.userId));
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch hospitals.' });
     }
+});
+
+// ── Services (per hospital) ──
+
+const serviceWithTypes = async (id, userId) => {
+    const s = await dbGet('SELECT * FROM services WHERE id = ? AND user_id = ?', [id, userId]);
+    if (s) s.types = await dbAll('SELECT * FROM service_types WHERE service_id = ? ORDER BY id', [id]);
+    return s;
+};
+
+app.post('/api/hospitals/:id/services', auth, async (req, res) => {
+    const { name, default_amount } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'Service name is required.' });
+    try {
+        const hospital = await dbGet('SELECT id FROM hospitals WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
+        if (!hospital) return res.status(404).json({ error: 'Hospital not found.' });
+        const r = await dbRun('INSERT INTO services (user_id, hospital_id, name, default_amount) VALUES (?, ?, ?, ?)',
+            [req.userId, req.params.id, name.trim(), Number(default_amount) || 0]);
+        res.json(await serviceWithTypes(r.lastID, req.userId));
+    } catch (err) { res.status(500).json({ error: 'Failed to add service.' }); }
+});
+
+app.put('/api/services/:id', auth, async (req, res) => {
+    const { name, default_amount } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'Service name is required.' });
+    try {
+        const r = await dbRun('UPDATE services SET name = ?, default_amount = ? WHERE id = ? AND user_id = ?',
+            [name.trim(), Number(default_amount) || 0, req.params.id, req.userId]);
+        if (r.changes === 0) return res.status(404).json({ error: 'Service not found.' });
+        res.json(await serviceWithTypes(req.params.id, req.userId));
+    } catch (err) { res.status(500).json({ error: 'Failed to update service.' }); }
+});
+
+app.delete('/api/services/:id', auth, async (req, res) => {
+    try {
+        const r = await dbRun('DELETE FROM services WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
+        if (r.changes === 0) return res.status(404).json({ error: 'Service not found.' });
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'Failed to delete service.' }); }
+});
+
+app.post('/api/services/:id/types', auth, async (req, res) => {
+    const { name, amount } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'Type name is required.' });
+    try {
+        const service = await dbGet('SELECT id FROM services WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
+        if (!service) return res.status(404).json({ error: 'Service not found.' });
+        const r = await dbRun('INSERT INTO service_types (user_id, service_id, name, amount) VALUES (?, ?, ?, ?)',
+            [req.userId, req.params.id, name.trim(), Number(amount) || 0]);
+        res.json(await dbGet('SELECT * FROM service_types WHERE id = ?', [r.lastID]));
+    } catch (err) { res.status(500).json({ error: 'Failed to add type.' }); }
+});
+
+app.put('/api/service-types/:id', auth, async (req, res) => {
+    const { name, amount } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'Type name is required.' });
+    try {
+        const r = await dbRun('UPDATE service_types SET name = ?, amount = ? WHERE id = ? AND user_id = ?',
+            [name.trim(), Number(amount) || 0, req.params.id, req.userId]);
+        if (r.changes === 0) return res.status(404).json({ error: 'Type not found.' });
+        res.json(await dbGet('SELECT * FROM service_types WHERE id = ?', [req.params.id]));
+    } catch (err) { res.status(500).json({ error: 'Failed to update type.' }); }
+});
+
+app.delete('/api/service-types/:id', auth, async (req, res) => {
+    try {
+        const r = await dbRun('DELETE FROM service_types WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
+        if (r.changes === 0) return res.status(404).json({ error: 'Type not found.' });
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'Failed to delete type.' }); }
 });
 
 app.post('/api/hospitals', auth, async (req, res) => {
@@ -109,6 +184,7 @@ app.post('/api/hospitals', auth, async (req, res) => {
             [req.userId, name, location || 'Bangalore', payout_basis || 'share', payout_percentage ?? 80, fixed_fee ?? 0, tds_rate ?? 10, deduction_rate ?? 2, settlement_cycle || '30 days', finance_contact_name || null, finance_contact_email || null, finance_contact_phone || null]
         );
         const hospital = await dbGet('SELECT * FROM hospitals WHERE id = ?', [result.lastID]);
+        hospital.services = [];
         res.json(hospital);
     } catch (err) {
         res.status(500).json({ error: 'Failed to create hospital.' });
@@ -131,7 +207,7 @@ app.put('/api/hospitals/:id', auth, async (req, res) => {
     try {
         await dbRun(`UPDATE hospitals SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`, params);
         const hospital = await dbGet('SELECT * FROM hospitals WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
-        res.json(hospital);
+        res.json((await attachServices([hospital], req.userId))[0]);
     } catch (err) {
         res.status(500).json({ error: 'Failed to update hospital.' });
     }
@@ -166,18 +242,35 @@ app.get('/api/procedures', auth, async (req, res) => {
 });
 
 app.post('/api/procedures', auth, async (req, res) => {
-    const { hospital_id, date, patient_name, procedure_type, cases, gross_amount } = req.body;
+    const { hospital_id, date, patient_name, procedure_type, cases, gross_amount, service_id, service_type_id } = req.body;
     if (!hospital_id || !date) return res.status(400).json({ error: 'hospital_id and date are required.' });
     try {
         const hospital = await dbGet('SELECT * FROM hospitals WHERE id = ? AND user_id = ?', [hospital_id, req.userId]);
         if (!hospital) return res.status(404).json({ error: 'Hospital not found.' });
 
-        const w = calcWaterfall(hospital, gross_amount, cases);
+        // Amount comes from the hospital's configured service/type unless the doctor overrides it.
+        let label = procedure_type || 'Consultation';
+        let amount = gross_amount;
+        let service = null, type = null;
+        if (service_id) {
+            service = await dbGet('SELECT * FROM services WHERE id = ? AND hospital_id = ? AND user_id = ?', [service_id, hospital_id, req.userId]);
+            if (!service) return res.status(404).json({ error: 'Service not found for this hospital.' });
+            label = service.name;
+            if (amount === undefined || amount === null || amount === '') amount = service.default_amount;
+            if (service_type_id) {
+                type = await dbGet('SELECT * FROM service_types WHERE id = ? AND service_id = ? AND user_id = ?', [service_type_id, service_id, req.userId]);
+                if (!type) return res.status(404).json({ error: 'Service type not found.' });
+                label = `${service.name} — ${type.name}`;
+                if (gross_amount === undefined || gross_amount === null || gross_amount === '') amount = type.amount;
+            }
+        }
+
+        const w = calcWaterfall(hospital, amount, cases);
 
         const result = await dbRun(
-            `INSERT INTO procedures (user_id, hospital_id, date, patient_name, procedure_type, cases, gross_amount, doctor_share, tds_amount, deduction_amount, net_expected)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [req.userId, hospital_id, date, patient_name || null, procedure_type || 'Consultation', w.cases, w.gross_amount, w.doctor_share, w.tds_amount, w.deduction_amount, w.net_expected]
+            `INSERT INTO procedures (user_id, hospital_id, date, patient_name, procedure_type, cases, gross_amount, doctor_share, tds_amount, deduction_amount, net_expected, service_id, service_type_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [req.userId, hospital_id, date, patient_name || null, label, w.cases, w.gross_amount, w.doctor_share, w.tds_amount, w.deduction_amount, w.net_expected, service?.id ?? null, type?.id ?? null]
         );
         const proc = await dbGet(
             `SELECT p.*, h.name as hospital_name FROM procedures p JOIN hospitals h ON p.hospital_id = h.id WHERE p.id = ?`,
@@ -253,54 +346,23 @@ app.get('/api/payouts', auth, async (req, res) => {
 });
 
 app.post('/api/payouts', auth, async (req, res) => {
-    const { hospital_id, date, period, actual_net, transaction_ref, procedure_ids } = req.body;
+    const { hospital_id, date, period, actual_net, transaction_ref, notes } = req.body;
     if (!hospital_id || !date) return res.status(400).json({ error: 'hospital_id and date are required.' });
+    const amount = Number(actual_net);
+    if (!(amount > 0)) return res.status(400).json({ error: 'Amount received must be greater than zero.' });
     try {
         const hospital = await dbGet('SELECT * FROM hospitals WHERE id = ? AND user_id = ?', [hospital_id, req.userId]);
         if (!hospital) return res.status(404).json({ error: 'Hospital not found.' });
 
-        let gross_amount = 0, tds = 0, deductions = 0, expected_net = 0;
-        const linkedProcedures = [];
-
-        if (procedure_ids && procedure_ids.length > 0) {
-            const placeholders = procedure_ids.map(() => '?').join(',');
-            const procs = await dbAll(
-                `SELECT * FROM procedures WHERE id IN (${placeholders}) AND user_id = ?`,
-                [...procedure_ids, req.userId]
-            );
-            for (const p of procs) {
-                gross_amount += p.gross_amount;
-                tds += p.tds_amount;
-                deductions += p.deduction_amount;
-                expected_net += p.net_expected;
-                linkedProcedures.push(p);
-            }
-        }
-
-        const actualNet = actual_net || 0;
-        const shortfall = expected_net - actualNet;
-
         const result = await dbRun(
-            `INSERT INTO payouts (user_id, hospital_id, date, period, gross_amount, tds, deductions, expected_net, actual_net, shortfall, transaction_ref)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [req.userId, hospital_id, date, period || null, gross_amount, tds, deductions, expected_net, actualNet, shortfall, transaction_ref || null]
+            `INSERT INTO payouts (user_id, hospital_id, date, period, actual_net, transaction_ref, notes, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'Under Review')`,
+            [req.userId, hospital_id, date, period || null, amount, transaction_ref || null, notes || null]
         );
-
-        const payoutId = result.lastID;
-
-        if (procedure_ids && procedure_ids.length > 0) {
-            for (const pid of procedure_ids) {
-                await dbRun('INSERT INTO payout_procedures (payout_id, procedure_id) VALUES (?, ?)', [payoutId, pid]);
-            }
-            const placeholders = procedure_ids.map(() => '?').join(',');
-            await dbRun(`UPDATE procedures SET status = 'Paid' WHERE id IN (${placeholders}) AND user_id = ?`, [...procedure_ids, req.userId]);
-        }
-
         const payout = await dbGet(
             `SELECT py.*, h.name as hospital_name FROM payouts py JOIN hospitals h ON py.hospital_id = h.id WHERE py.id = ?`,
-            [payoutId]
+            [result.lastID]
         );
-        payout.procedures = linkedProcedures;
         res.json(payout);
     } catch (err) {
         res.status(500).json({ error: 'Failed to create payout.' });
@@ -355,20 +417,9 @@ app.get('/api/dashboard', auth, async (req, res) => {
             [req.userId]
         );
 
-        const receivedRow = await dbGet(
-            `SELECT COALESCE(SUM(actual_net), 0) as totalReceived
-             FROM payouts WHERE user_id = ? AND status = 'Paid'`,
-            [req.userId]
-        );
-
-        const hospitalCount = await dbGet(
-            'SELECT COUNT(*) as count FROM hospitals WHERE user_id = ?',
-            [req.userId]
-        );
-
-        const totalReceived = receivedRow.totalReceived;
-        const totalPending = totals.expectedRevenue - totalReceived;
-        const collectionRate = totals.expectedRevenue > 0 ? (totalReceived / totals.expectedRevenue * 100) : 0;
+        const money = await moneySummary(req.userId);
+        const hospitalCount = await dbGet('SELECT COUNT(*) as count FROM hospitals WHERE user_id = ?', [req.userId]);
+        const collectionRate = money.earned > 0 ? (money.received / money.earned * 100) : 0;
 
         const recentProcedures = await dbAll(
             `SELECT p.*, h.name as hospital_name
@@ -380,53 +431,26 @@ app.get('/api/dashboard', auth, async (req, res) => {
             [req.userId]
         );
 
-        const hospitalSummary = await dbAll(
-            `SELECT
-                h.id,
-                h.name,
-                COUNT(p.id) as procedure_count,
-                COALESCE(SUM(p.gross_amount), 0) as total_billed,
-                COALESCE(SUM(p.net_expected), 0) as expected
-             FROM hospitals h
-             LEFT JOIN procedures p ON p.hospital_id = h.id
-             WHERE h.user_id = ?
-             GROUP BY h.id`,
-            [req.userId]
-        );
-
-        for (const hs of hospitalSummary) {
-            const recv = await dbGet(
-                `SELECT COALESCE(SUM(actual_net), 0) as received
-                 FROM payouts WHERE hospital_id = ? AND user_id = ? AND status = 'Paid'`,
-                [hs.id, req.userId]
-            );
-            hs.received = recv.received;
-            hs.pending = hs.expected - hs.received;
-        }
+        const hospitalSummary = await hospitalMoney(req.userId);
 
         const alerts = [];
-
-        const discrepancyCount = await dbGet(
-            `SELECT COUNT(*) as count FROM procedures WHERE user_id = ? AND status = 'Discrepancy'`,
+        const rejected = await dbAll(
+            `SELECT py.*, h.name as hospital_name FROM payouts py JOIN hospitals h ON py.hospital_id = h.id WHERE py.user_id = ? AND py.status = 'Rejected' ORDER BY py.date DESC LIMIT 5`,
             [req.userId]
         );
-        if (discrepancyCount.count > 0) {
-            alerts.push({ type: 'discrepancy', message: `${discrepancyCount.count} procedure(s) have discrepancies`, severity: 'warning' });
+        for (const r of rejected) {
+            alerts.push({ type: 'rejected', message: `Payment of ${r.actual_net} from ${r.hospital_name} on ${r.date} was rejected${r.notes ? `: ${r.notes}` : ''}`, severity: 'error' });
         }
-
-        const shortfallPayouts = await dbAll(
-            `SELECT py.*, h.name as hospital_name FROM payouts py JOIN hospitals h ON py.hospital_id = h.id WHERE py.user_id = ? AND py.shortfall > 0`,
-            [req.userId]
-        );
-        for (const sp of shortfallPayouts) {
-            alerts.push({ type: 'shortfall', message: `Payout shortfall of ${sp.shortfall.toFixed(2)} from ${sp.hospital_name} on ${sp.date}`, severity: 'error' });
+        if (money.underReview > 0) {
+            alerts.push({ type: 'review', message: `${money.underReviewCount} payment(s) awaiting verification`, severity: 'warning' });
         }
 
         res.json({
             totalBilled: totals.totalBilled,
-            expectedRevenue: totals.expectedRevenue,
-            totalReceived,
-            totalPending,
+            earned: money.earned,
+            received: money.received,
+            underReview: money.underReview,
+            pending: money.pending,
             collectionRate,
             totalTds: totals.totalTds,
             procedureCount: totals.procedureCount,
@@ -440,116 +464,54 @@ app.get('/api/dashboard', auth, async (req, res) => {
     }
 });
 
+// Earned comes from entries, received/under review from payment records; pending is the remainder.
+async function moneySummary(userId, hospitalId = null) {
+    const scope = hospitalId ? 'AND hospital_id = ?' : '';
+    const params = hospitalId ? [userId, hospitalId] : [userId];
+    const e = await dbGet(`SELECT COALESCE(SUM(net_expected), 0) as earned FROM procedures WHERE user_id = ? ${scope}`, params);
+    const p = await dbGet(
+        `SELECT COALESCE(SUM(CASE WHEN status = 'Paid' THEN actual_net END), 0) as received,
+                COALESCE(SUM(CASE WHEN status = 'Under Review' THEN actual_net END), 0) as underReview,
+                SUM(CASE WHEN status = 'Under Review' THEN 1 ELSE 0 END) as underReviewCount
+         FROM payouts WHERE user_id = ? ${scope}`, params);
+    return {
+        earned: e.earned,
+        received: p.received,
+        underReview: p.underReview,
+        underReviewCount: p.underReviewCount || 0,
+        pending: Math.max(0, e.earned - p.received - p.underReview),
+    };
+}
+
+async function hospitalMoney(userId) {
+    const hospitals = await dbAll(
+        `SELECT h.id, h.name, COUNT(p.id) as procedure_count, COALESCE(SUM(p.gross_amount), 0) as total_billed
+         FROM hospitals h LEFT JOIN procedures p ON p.hospital_id = h.id
+         WHERE h.user_id = ? GROUP BY h.id ORDER BY h.name`, [userId]);
+    for (const h of hospitals) {
+        const m = await moneySummary(userId, h.id);
+        h.earned = m.earned; h.received = m.received; h.under_review = m.underReview; h.pending = m.pending;
+    }
+    return hospitals;
+}
+
 // ── Reconciliation ──
 
 app.get('/api/reconciliation', auth, async (req, res) => {
     try {
-        const summary = await dbGet(
-            `SELECT
-                COALESCE(SUM(CASE WHEN status = 'Matched' THEN 1 ELSE 0 END), 0) as matched,
-                COALESCE(SUM(CASE WHEN status = 'Discrepancy' THEN 1 ELSE 0 END), 0) as discrepancy,
-                COALESCE(SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END), 0) as pending,
-                COALESCE(SUM(CASE WHEN status NOT IN ('Matched','Discrepancy','Pending') THEN 1 ELSE 0 END), 0) as unmatched,
-                COUNT(*) as total,
-                COALESCE(SUM(tds_amount), 0) as totalTds,
-                COALESCE(SUM(deduction_amount), 0) as totalDeductions
-             FROM procedures WHERE user_id = ?`,
+        const summary = await moneySummary(req.userId);
+        const hospitals = await hospitalMoney(req.userId);
+        const totals = await dbGet(
+            `SELECT COALESCE(SUM(tds_amount), 0) as totalTds, COALESCE(SUM(deduction_amount), 0) as totalDeductions FROM procedures WHERE user_id = ?`,
             [req.userId]
         );
-
-        const matchRate = summary.total > 0 ? (summary.matched / summary.total * 100) : 0;
-
-        const matched = await dbAll(
-            `SELECT p.*, h.name as hospital_name FROM procedures p JOIN hospitals h ON p.hospital_id = h.id WHERE p.user_id = ? AND p.status = 'Matched' ORDER BY p.date DESC`,
+        const payouts = await dbAll(
+            `SELECT py.*, h.name as hospital_name FROM payouts py JOIN hospitals h ON py.hospital_id = h.id WHERE py.user_id = ? ORDER BY py.date DESC, py.id DESC`,
             [req.userId]
         );
-
-        const discrepancies = await dbAll(
-            `SELECT p.*, h.name as hospital_name FROM procedures p JOIN hospitals h ON p.hospital_id = h.id WHERE p.user_id = ? AND p.status = 'Discrepancy' ORDER BY p.date DESC`,
-            [req.userId]
-        );
-
-        const unmatched = await dbAll(
-            `SELECT p.*, h.name as hospital_name
-             FROM procedures p
-             JOIN hospitals h ON p.hospital_id = h.id
-             LEFT JOIN payout_procedures pp ON p.id = pp.procedure_id
-             WHERE p.user_id = ? AND (p.status = 'Pending' OR pp.payout_id IS NULL)
-             ORDER BY p.date DESC`,
-            [req.userId]
-        );
-
-        res.json({
-            summary: { matched: summary.matched, discrepancy: summary.discrepancy, pending: summary.pending, unmatched: summary.unmatched },
-            matchRate,
-            totalTds: summary.totalTds,
-            totalDeductions: summary.totalDeductions,
-            matched,
-            discrepancies,
-            unmatched
-        });
+        res.json({ summary, hospitals, totalTds: totals.totalTds, totalDeductions: totals.totalDeductions, payouts });
     } catch (err) {
         res.status(500).json({ error: 'Failed to load reconciliation.' });
-    }
-});
-
-// ── Statements ──
-
-app.get('/api/statements', auth, async (req, res) => {
-    try {
-        const statements = await dbAll(
-            `SELECT s.*, h.name as hospital_name
-             FROM statements s
-             JOIN hospitals h ON s.hospital_id = h.id
-             WHERE s.user_id = ?
-             ORDER BY s.created_at DESC`,
-            [req.userId]
-        );
-        res.json(statements);
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to fetch statements.' });
-    }
-});
-
-app.post('/api/statements', auth, async (req, res) => {
-    const { hospital_id, period, filename } = req.body;
-    if (!hospital_id || !period) return res.status(400).json({ error: 'hospital_id and period are required.' });
-    try {
-        const result = await dbRun(
-            'INSERT INTO statements (user_id, hospital_id, period, filename, status) VALUES (?, ?, ?, ?, ?)',
-            [req.userId, hospital_id, period, filename || null, 'Processing']
-        );
-        const statement = await dbGet(
-            `SELECT s.*, h.name as hospital_name FROM statements s JOIN hospitals h ON s.hospital_id = h.id WHERE s.id = ?`,
-            [result.lastID]
-        );
-        res.json(statement);
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to create statement.' });
-    }
-});
-
-app.put('/api/statements/:id', auth, async (req, res) => {
-    const fields = ['status', 'matched_count', 'discrepancy_count', 'unmatched_count', 'filename'];
-    const sets = [];
-    const params = [];
-    for (const f of fields) {
-        if (req.body[f] !== undefined) {
-            sets.push(`${f} = ?`);
-            params.push(req.body[f]);
-        }
-    }
-    if (sets.length === 0) return res.status(400).json({ error: 'Nothing to update.' });
-    params.push(req.params.id, req.userId);
-    try {
-        await dbRun(`UPDATE statements SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`, params);
-        const statement = await dbGet(
-            `SELECT s.*, h.name as hospital_name FROM statements s JOIN hospitals h ON s.hospital_id = h.id WHERE s.id = ?`,
-            [req.params.id]
-        );
-        res.json(statement);
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to update statement.' });
     }
 });
 

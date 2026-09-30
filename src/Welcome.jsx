@@ -1,20 +1,20 @@
-import { Activity, ArrowRight, Building2, FileText, IndianRupee, ShieldCheck, Upload } from 'lucide-react'
+import { Activity, ArrowRight, Building2, FileText, IndianRupee, ShieldCheck, Zap } from 'lucide-react'
 import CinematicFooter from './CinematicFooter.jsx'
 import './welcome.css'
 
 const FEATURES = [
-  { icon: FileText, title: 'Log procedures in seconds', text: 'Pick the hospital, enter cases and the billing amount per case. The payout waterfall is calculated instantly.' },
+  { icon: FileText, title: 'Services priced per hospital', text: 'Consultation at ₹1,000 here, ₹1,500 there; surgery types with their own rates. Set it once, never type it again.' },
   { icon: Building2, title: 'Share or fixed-fee rules', text: 'Model each hospital the way it actually pays you: a percentage of gross billing, or a fixed amount per case.' },
   { icon: IndianRupee, title: 'TDS and deductions, automatically', text: 'Every entry shows gross, your share, TDS, deductions and the exact net you should expect to receive.' },
-  { icon: Upload, title: 'Upload hospital statements', text: 'Drop in the statement for a settlement period and let DocTrack line it up against your ledger.' },
-  { icon: Activity, title: 'Reconciliation at a glance', text: 'Matched, discrepancies and unmatched procedures side by side, with a live match rate for each hospital.' },
-  { icon: ShieldCheck, title: 'Shortfall alerts', text: 'When a payout arrives short, DocTrack flags the gap so you can raise it with the finance team immediately.' },
+  { icon: Zap, title: 'Three-click daily entries', text: 'Hospital, service, save. Amounts fill in from your configured prices and the form remembers your last hospital.' },
+  { icon: Activity, title: 'Earned vs received', text: 'Earned, received, under review and pending — per hospital, always calculated from real entries and payments.' },
+  { icon: ShieldCheck, title: 'Verified payments', text: 'Record a payment in seconds; it stays under review until verified so your numbers are never inflated.' },
 ]
 
 const STEPS = [
-  { n: '01', title: 'Add your hospitals', text: 'Enter each hospital once with its payout rule, TDS rate, deductions and settlement cycle.' },
-  { n: '02', title: 'Log your work', text: 'Record procedures as they happen. Multiple cases on the same day take one entry.' },
-  { n: '03', title: 'Reconcile payouts', text: 'Record what actually landed in your account and see exactly where it differs from what was owed.' },
+  { n: '01', title: 'Add your hospitals', text: 'Enter each hospital once with its payout rule and its services — consultation, follow-up, surgery types — with prices.' },
+  { n: '02', title: 'Log your work', text: 'Pick hospital and service; the amount appears. Multiple cases on the same day take one entry.' },
+  { n: '03', title: 'Record payments', text: 'Enter what landed in your account. DocTrack shows earned vs received and what is still pending, per hospital.' },
 ]
 
 export default function Welcome({ onLogin, onSignup }) {
@@ -28,7 +28,7 @@ export default function Welcome({ onLogin, onSignup }) {
           </div>
           <nav>
             <button className="welcome-link" onClick={onLogin}>Log in</button>
-            <button className="welcome-btn" onClick={onSignup}>Get started <ArrowRight size={16} /></button>
+            <button className="welcome-btn btn-noise" onClick={onSignup}>Get started <ArrowRight size={16} /></button>
           </nav>
         </header>
 
@@ -37,7 +37,7 @@ export default function Welcome({ onLogin, onSignup }) {
           <h1>Know exactly what every hospital owes you.</h1>
           <p>DocTrack turns your procedures into an expected-payout ledger, then checks each settlement against it — TDS, deductions and shortfalls included.</p>
           <div className="welcome-cta">
-            <button className="welcome-btn large" onClick={onSignup}>Create free account <ArrowRight size={18} /></button>
+            <button className="welcome-btn btn-noise large" onClick={onSignup}>Create free account <ArrowRight size={18} /></button>
             <button className="welcome-btn ghost large" onClick={onLogin}>I already have an account</button>
           </div>
           <div className="welcome-preview">

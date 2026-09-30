@@ -284,14 +284,13 @@ function PaymentsPage() {
       </div>
       <div className="card">
         <table className="data-table">
-          <thead><tr><th>Doctor</th><th>Hospital</th><th>Date</th><th>Expected</th><th>Actual</th><th>Shortfall</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Doctor</th><th>Hospital</th><th>Date</th><th>Amount</th><th>Reference</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody>
             {filtered.map(p => (
               <tr key={p.id}>
                 <td>{p.doctor_name}</td><td>{p.hospital_name}</td><td>{formatDate(p.date)}</td>
-                <td>{formatCurrency(p.expected_net)}</td><td>{formatCurrency(p.actual_net)}</td>
-                <td style={{ color: p.shortfall > 0 ? 'var(--danger)' : 'var(--success)' }}>{formatCurrency(p.shortfall)}</td>
-                <td><StatusBadge status={p.status} /></td>
+                <td>{formatCurrency(p.actual_net)}</td><td>{p.transaction_ref || '—'}</td>
+                <td><StatusBadge status={p.status} />{p.status === 'Rejected' && p.notes && <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{p.notes}</div>}</td>
                 <td>
                   {(p.status === 'Pending' || p.status === 'Under Review') && (
                     <div style={{ display: 'flex', gap: 6 }}>
@@ -302,7 +301,7 @@ function PaymentsPage() {
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={8} className="empty-state">No payments found</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={7} className="empty-state">No payments found</td></tr>}
           </tbody>
         </table>
       </div>

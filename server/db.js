@@ -48,9 +48,31 @@ const SCHEMA = [
     net_expected REAL DEFAULT 0,
     status TEXT DEFAULT 'Pending',
     notes TEXT,
+    service_id INTEGER,
+    service_type_id INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY(hospital_id) REFERENCES hospitals(id) ON DELETE CASCADE
+)`,
+`CREATE TABLE IF NOT EXISTS services (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    hospital_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    default_amount REAL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY(hospital_id) REFERENCES hospitals(id) ON DELETE CASCADE
+)`,
+`CREATE TABLE IF NOT EXISTS service_types (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    service_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    amount REAL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY(service_id) REFERENCES services(id) ON DELETE CASCADE
 )`,
 `CREATE TABLE IF NOT EXISTS payouts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,27 +93,8 @@ const SCHEMA = [
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY(hospital_id) REFERENCES hospitals(id) ON DELETE CASCADE
 )`,
-`CREATE TABLE IF NOT EXISTS payout_procedures (
-    payout_id INTEGER NOT NULL,
-    procedure_id INTEGER NOT NULL,
-    PRIMARY KEY(payout_id, procedure_id),
-    FOREIGN KEY(payout_id) REFERENCES payouts(id) ON DELETE CASCADE,
-    FOREIGN KEY(procedure_id) REFERENCES procedures(id) ON DELETE CASCADE
-)`,
-`CREATE TABLE IF NOT EXISTS statements (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    hospital_id INTEGER NOT NULL,
-    period TEXT NOT NULL,
-    filename TEXT,
-    status TEXT DEFAULT 'Processing',
-    matched_count INTEGER DEFAULT 0,
-    discrepancy_count INTEGER DEFAULT 0,
-    unmatched_count INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY(hospital_id) REFERENCES hospitals(id) ON DELETE CASCADE
-)`,
+`DROP TABLE IF EXISTS payout_procedures`,
+`DROP TABLE IF EXISTS statements`,
 `CREATE TABLE IF NOT EXISTS audit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     admin_id INTEGER NOT NULL,
@@ -164,6 +167,8 @@ for (const stmt of SCHEMA) await db.exec(stmt);
 for (const stmt of [
     `ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'`,
     `ALTER TABLE hospitals ADD COLUMN payout_basis TEXT DEFAULT 'share'`,
+    `ALTER TABLE procedures ADD COLUMN service_id INTEGER`,
+    `ALTER TABLE procedures ADD COLUMN service_type_id INTEGER`,
 ]) {
     try { await db.exec(stmt); } catch { /* already applied */ }
 }
