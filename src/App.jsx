@@ -51,7 +51,7 @@ const payoutBadge = (status) => status === 'Paid' ? 'green' : status === 'Partia
 const PayoutStatus = ({ p, onChange }) => p.status === 'Rejected'
   ? <><span className="badge red">Rejected</span>{p.notes && <div className="text-xs text-muted" style={{ marginTop: 4 }}>{p.notes}</div>}</>
   : (
-    <select className={`status-select ${payoutBadge(p.status)}`} aria-label="Payment status" value={p.status} onChange={e => onChange(p, e.target.value)}>
+    <select className={`status-select ${payoutBadge(p.status)}`} aria-label="Payment status" value={p.status} onChange={e => { const next = e.target.value; e.target.value = p.status; onChange(p, next) }}>
       {PAYOUT_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
   )
@@ -576,7 +576,7 @@ function App() {
           <th>Date</th><th>Hospital</th><th>Reference</th><th>Amount</th><th>Status</th>
         </tr></thead><tbody>
           {payouts.map(py => (
-            <tr key={py.id}>
+            <tr key={py.id} className={`status-row ${payoutBadge(py.status)}`}>
               <td className="nowrap">{formatDate(py.date)}</td><td className="font-semibold">{py.hospital_name}</td><td>{py.transaction_ref || '—'}</td>
               <td className="amount">{formatMoney(py.actual_net)}</td>
               <td><PayoutStatus p={py} onChange={requestStatusChange} /></td>
@@ -622,7 +622,7 @@ function App() {
           <div className="card-body compact"><div className="table-wrap"><table className="data-table"><thead><tr>
             <th>Date</th><th>Hospital</th><th>Reference</th><th>Amount</th><th>Status</th>
           </tr></thead><tbody>
-            {r.payouts.map(p => <tr key={p.id}><td className="nowrap">{formatDate(p.date)}</td><td>{p.hospital_name}</td><td>{p.transaction_ref || '—'}</td><td className="amount">{formatMoney(p.actual_net)}</td><td><PayoutStatus p={p} onChange={requestStatusChange} /></td></tr>)}
+            {r.payouts.map(p => <tr key={p.id} className={`status-row ${payoutBadge(p.status)}`}><td className="nowrap">{formatDate(p.date)}</td><td>{p.hospital_name}</td><td>{p.transaction_ref || '—'}</td><td className="amount">{formatMoney(p.actual_net)}</td><td><PayoutStatus p={p} onChange={requestStatusChange} /></td></tr>)}
             {r.payouts.length === 0 && <tr><td colSpan={5} className="text-center text-muted" style={{ padding: '24px' }}>No payments recorded yet</td></tr>}
           </tbody></table></div></div>
         </div>
@@ -666,7 +666,7 @@ function App() {
               <p className="text-sm text-secondary" style={{ margin: '0 0 16px' }}>
                 {p.hospital_name} · {formatDate(p.date)} · <strong>{formatMoney(p.actual_net)}</strong>{p.transaction_ref ? ` · ${p.transaction_ref}` : ''}
               </p>
-              <div className="status-change">
+              <div className={`status-change ${payoutBadge(status)}`}>
                 <span className={`badge ${payoutBadge(p.status)}`}>{statusLabel(p.status)}</span>
                 <ArrowRight size={16} className="text-muted" />
                 <span className={`badge ${payoutBadge(status)}`}>{statusLabel(status)}</span>
