@@ -1270,6 +1270,25 @@ button { cursor: pointer; border: none; background: none; }
   background-position: right 10px center;
 }
 .status-select:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.status-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.75rem; color: var(--text-secondary); }
+.status-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.status-dot.green { background: var(--green); }
+.status-dot.blue { background: var(--blue); }
+.status-dot.amber { background: var(--amber); }
+.status-dot.red { background: var(--red); }
+.status-change {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 18px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  border: 1px solid var(--border-light);
+}
+.status-change .badge { font-size: 0.875rem; padding: 6px 14px; }
+@media (max-width: 640px) { .card-header .status-legend { display: none; } }
 .status-select.green { background-color: var(--green-bg); color: #059669; border-color: var(--green-border); }
 .status-select.blue { background-color: var(--blue-bg); color: #2563eb; border-color: var(--blue-border); }
 .status-select.amber { background-color: var(--amber-bg); color: #d97706; border-color: var(--amber-border); }

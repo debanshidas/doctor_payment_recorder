@@ -25,10 +25,19 @@ const GrossCell = ({ p }) => (
 const EMPTY_HOSPITAL = { name: '', location: 'Bangalore', payout_basis: 'share', payout_percentage: '80', fixed_fee: '0', tds_rate: '10', deduction_rate: '2', settlement_cycle: '30 days', finance_contact_name: '', finance_contact_email: '', finance_contact_phone: '' }
 const EMPTY_PAYOUT = () => ({ hospital_id: '', date: today(), actual_net: '', transaction_ref: '', notes: '', status: 'Paid' })
 const PAYOUT_STATUS_OPTIONS = [
-  { value: 'Paid', label: 'Fully Paid', hint: 'Dues settled in full' },
-  { value: 'Partially Paid', label: 'Partially Paid', hint: 'Part of the dues received' },
-  { value: 'Under Review', label: 'Under Review', hint: 'Needs admin verification' },
+  { value: 'Paid', label: 'Fully Paid', hint: 'Dues settled in full', color: 'green' },
+  { value: 'Partially Paid', label: 'Partially Paid', hint: 'Part of the dues received', color: 'blue' },
+  { value: 'Under Review', label: 'Under Review', hint: 'Needs admin verification', color: 'amber' },
 ]
+const statusLabel = (value) => PAYOUT_STATUS_OPTIONS.find(o => o.value === value)?.label || value
+
+const StatusLegend = () => (
+  <div className="status-legend" aria-hidden="true">
+    {[...PAYOUT_STATUS_OPTIONS, { value: 'Rejected', label: 'Rejected', color: 'red' }].map(o => (
+      <span key={o.value}><i className={`status-dot ${o.color}`} />{o.label}</span>
+    ))}
+  </div>
+)
 const SERVICE_SUGGESTIONS = ['Consultation', 'Follow-up', 'Surgery', 'Procedure', 'Ward Round', 'Emergency Call']
 const MANUAL = 'manual'
 
@@ -42,7 +51,7 @@ const payoutBadge = (status) => status === 'Paid' ? 'green' : status === 'Partia
 const PayoutStatus = ({ p, onChange }) => p.status === 'Rejected'
   ? <><span className="badge red">Rejected</span>{p.notes && <div className="text-xs text-muted" style={{ marginTop: 4 }}>{p.notes}</div>}</>
   : (
-    <select className={`status-select ${payoutBadge(p.status)}`} aria-label="Payment status" value={p.status} onChange={e => onChange(p.id, e.target.value)}>
+    <select className={`status-select ${payoutBadge(p.status)}`} aria-label="Payment status" value={p.status} onChange={e => onChange(p, e.target.value)}>
       {PAYOUT_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
   )
@@ -120,6 +129,7 @@ function App() {
   const [serviceError, setServiceError] = useState('')
   const [payoutForm, setPayoutForm] = useState(EMPTY_PAYOUT)
   const [payoutError, setPayoutError] = useState('')
+  const [statusChange, setStatusChange] = useState(null)
 
   const [ledgerHospital, setLedgerHospital] = useState('All')
   const [expandedRow, setExpandedRow] = useState(null)
@@ -332,10 +342,14 @@ function App() {
     } catch (err) { setPayoutError(err.message) }
   }
 
-  const changePayoutStatus = async (id, status) => {
+  const requestStatusChange = (p, status) => { if (status !== p.status) setStatusChange({ p, status }) }
+
+  const confirmStatusChange = async () => {
+    const { p, status } = statusChange
     try {
-      await api(`/payouts/${id}`, { method: 'PUT', body: JSON.stringify({ status }) })
-      setToast(`Marked ${status.toLowerCase()}`)
+      await api(`/payouts/${p.id}`, { method: 'PUT', body: JSON.stringify({ status }) })
+      setStatusChange(null)
+      setToast(`${p.hospital_name} payment of ${formatMoney(p.actual_net)} marked as ${statusLabel(status)}`)
       load()
     } catch (err) { setToast(err.message) }
   }
@@ -569,14 +583,14 @@ function App() {
           <p>Record a payment when a hospital settles your dues — fully, partially, or pending verification.</p>
         </div></div>
       ) : (
-        <div className="card"><div className="card-body compact"><div className="table-wrap"><table className="data-table"><thead><tr>
+        <div className="card"><div className="card-header"><h3>All payments</h3><StatusLegend /></div><div className="card-body compact"><div className="table-wrap"><table className="data-table"><thead><tr>
           <th>Date</th><th>Hospital</th><th>Reference</th><th>Amount</th><th>Status</th>
         </tr></thead><tbody>
           {payouts.map(py => (
             <tr key={py.id}>
               <td className="nowrap">{formatDate(py.date)}</td><td className="font-semibold">{py.hospital_name}</td><td>{py.transaction_ref || '—'}</td>
               <td className="amount">{formatMoney(py.actual_net)}</td>
-              <td><PayoutStatus p={py} onChange={changePayoutStatus} /></td>
+              <td><PayoutStatus p={py} onChange={requestStatusChange} /></td>
             </tr>
           ))}
         </tbody></table></div></div></div>
@@ -615,11 +629,11 @@ function App() {
         </div>
 
         <div className="card">
-          <div className="card-header"><h3>Payments{review.length > 0 ? ` · ${review.length} under review` : ''}</h3><button className="card-link" onClick={() => setPage('Payouts')}>Record payment <ArrowRight size={14} /></button></div>
+          <div className="card-header"><h3>Payments{review.length > 0 ? ` · ${review.length} under review` : ''}</h3><div className="flex items-center gap-4"><StatusLegend /><button className="card-link" onClick={() => setPage('Payouts')}>Record payment <ArrowRight size={14} /></button></div></div>
           <div className="card-body compact"><div className="table-wrap"><table className="data-table"><thead><tr>
             <th>Date</th><th>Hospital</th><th>Reference</th><th>Amount</th><th>Status</th>
           </tr></thead><tbody>
-            {r.payouts.map(p => <tr key={p.id}><td className="nowrap">{formatDate(p.date)}</td><td>{p.hospital_name}</td><td>{p.transaction_ref || '—'}</td><td className="amount">{formatMoney(p.actual_net)}</td><td><PayoutStatus p={p} onChange={changePayoutStatus} /></td></tr>)}
+            {r.payouts.map(p => <tr key={p.id}><td className="nowrap">{formatDate(p.date)}</td><td>{p.hospital_name}</td><td>{p.transaction_ref || '—'}</td><td className="amount">{formatMoney(p.actual_net)}</td><td><PayoutStatus p={p} onChange={requestStatusChange} /></td></tr>)}
             {r.payouts.length === 0 && <tr><td colSpan={5} className="text-center text-muted" style={{ padding: '24px' }}>No payments recorded yet</td></tr>}
           </tbody></table></div></div>
         </div>
@@ -653,6 +667,34 @@ function App() {
   const closeModal = () => { setShowModal(null); setServiceModal(null) }
 
   const renderModals = () => {
+    if (statusChange) {
+      const { p, status } = statusChange
+      return (
+        <div className="modal-backdrop" onClick={() => setStatusChange(null)}>
+          <div className="modal modal-compact animate-slide-up" role="alertdialog" aria-labelledby="status-title" onClick={e => e.stopPropagation()}>
+            <div className="modal-header"><h2 id="status-title">Change payment status?</h2><button className="btn-ghost" aria-label="Close" onClick={() => setStatusChange(null)}><X size={20} /></button></div>
+            <div className="modal-body">
+              <p className="text-sm text-secondary" style={{ margin: '0 0 16px' }}>
+                {p.hospital_name} · {formatDate(p.date)} · <strong>{formatMoney(p.actual_net)}</strong>{p.transaction_ref ? ` · ${p.transaction_ref}` : ''}
+              </p>
+              <div className="status-change">
+                <span className={`badge ${payoutBadge(p.status)}`}>{statusLabel(p.status)}</span>
+                <ArrowRight size={16} className="text-muted" />
+                <span className={`badge ${payoutBadge(status)}`}>{statusLabel(status)}</span>
+              </div>
+              <p className="text-xs text-muted" style={{ margin: '16px 0 0' }}>
+                {status === 'Under Review' ? 'This amount will move out of Received until it is verified.' : 'This amount will count as Received.'}
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-outline" onClick={() => setStatusChange(null)}>Cancel</button>
+              <button type="button" className={`btn ${status === 'Under Review' ? 'btn-primary' : 'btn-success'}`} onClick={confirmStatusChange}>Confirm</button>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
     if (!showModal) return null
 
     if (showModal === 'entry') {
