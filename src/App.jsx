@@ -516,48 +516,37 @@ function App() {
           {hospitals.map(h => {
             const m = dashboard?.hospitalSummary?.find(s => s.id === h.id)
             return (
-              <div key={h.id} className="hospital-card">
-                <div className="hospital-card-header">
-                  <div><h3>{h.name}</h3><span className="location">{h.location}</span></div>
-                  <button className="btn-ghost btn-sm text-red" aria-label="Delete hospital" onClick={() => deleteHospital(h.id)}><Trash2 size={14} /></button>
-                </div>
-                <div className="hospital-card-body">
-                  <div className="payout-rules">
-                    {h.payout_basis === 'fixed'
-                      ? <div className="payout-rule"><div className="payout-rule-label">Fixed Fee / Case</div><div className="payout-rule-value">{formatMoney(h.fixed_fee)}</div></div>
-                      : <div className="payout-rule"><div className="payout-rule-label">Revenue Share</div><div className="payout-rule-value">{h.payout_percentage}%</div></div>}
-                    <div className="payout-rule"><div className="payout-rule-label">TDS</div><div className="payout-rule-value">{h.tds_rate}%</div></div>
-                    <div className="payout-rule"><div className="payout-rule-label">Deductions</div><div className="payout-rule-value">{h.deduction_rate}%</div></div>
-                    <div className="payout-rule"><div className="payout-rule-label">Settlement</div><div className="payout-rule-value">{h.settlement_cycle}</div></div>
+              <article key={h.id} className="hospital-card">
+                <div className="hospital-cover">
+                  <span className="hospital-initials" aria-hidden="true">{h.name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()}</span>
+                  <button className="btn-ghost btn-sm hospital-delete" aria-label="Delete hospital" onClick={() => deleteHospital(h.id)}><Trash2 size={14} /></button>
+                  <div className="hospital-cover-meta">
+                    <strong>{describeRule(h)}</strong>
+                    <span>{h.tds_rate}% TDS · {h.deduction_rate}% deductions · settles in {h.settlement_cycle}</span>
                   </div>
+                </div>
+                <h3>{h.name}</h3>
+                <p>{h.location} · {h.services.length} service{h.services.length === 1 ? '' : 's'} · <span className={(m?.pending || 0) > 0 ? 'text-amber font-semibold' : ''}>{formatMoney(m?.pending || 0)} pending</span></p>
 
-                  <div className="services-block">
-                    <div className="services-title">Services</div>
-                    <div className="service-chips">
-                      {h.services.map(s => (
-                        <button key={s.id} type="button" className="service-chip" onClick={() => openServiceModal(h, s)} title="Edit service">
-                          <span className="service-chip-name">{s.name}</span>
-                          <span className="service-chip-amt">{s.types.length > 0 ? `${s.types.length} type${s.types.length > 1 ? 's' : ''}` : formatMoney(s.default_amount)}</span>
-                          <Pencil size={12} className="service-chip-edit" />
-                        </button>
-                      ))}
-                      <button type="button" className="service-chip add" onClick={() => openServiceModal(h, null)}><Plus size={14} /> Add Service</button>
-                    </div>
+                <div className="service-chips">
+                  {h.services.map(s => (
+                    <button key={s.id} type="button" className="service-chip" onClick={() => openServiceModal(h, s)} title="Edit service">
+                      <span className="service-chip-name">{s.name}</span>
+                      <span className="service-chip-amt">{s.types.length > 0 ? `${s.types.length} type${s.types.length > 1 ? 's' : ''}` : formatMoney(s.default_amount)}</span>
+                      <Pencil size={12} className="service-chip-edit" />
+                    </button>
+                  ))}
+                  <button type="button" className="service-chip add" onClick={() => openServiceModal(h, null)}><Plus size={14} /> Add Service</button>
+                </div>
+
+                {h.finance_contact_name && (
+                  <div className="finance-contact">
+                    <strong>{h.finance_contact_name}</strong>
+                    {h.finance_contact_email && <div>{h.finance_contact_email}</div>}
+                    {h.finance_contact_phone && <div>{h.finance_contact_phone}</div>}
                   </div>
-
-                  {h.finance_contact_name && (
-                    <div className="finance-contact">
-                      <strong>{h.finance_contact_name}</strong>
-                      {h.finance_contact_email && <div>{h.finance_contact_email}</div>}
-                      {h.finance_contact_phone && <div>{h.finance_contact_phone}</div>}
-                    </div>
-                  )}
-                </div>
-                <div className="hospital-card-footer">
-                  <span className="outstanding-label">Pending</span>
-                  <span className={`outstanding-value ${(m?.pending || 0) > 0 ? 'positive' : ''}`}>{formatMoney(m?.pending || 0)}</span>
-                </div>
-              </div>
+                )}
+              </article>
             )
           })}
         </div>
