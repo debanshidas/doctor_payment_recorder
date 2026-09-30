@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Eye, EyeOff, LayoutDashboard, Building2, FileText, IndianRupee, AlertTriangle, LogOut, Menu, X, Plus, User, ChevronDown, ChevronRight, Receipt, CheckCircle2, ArrowLeft, ArrowRight, Trash2, Pencil } from 'lucide-react'
+import { Eye, EyeOff, LayoutDashboard, Building2, FileText, IndianRupee, AlertTriangle, LogOut, Menu, X, Plus, User, ChevronDown, ChevronRight, Receipt, CheckCircle2, ArrowLeft, ArrowRight, Trash2, Pencil, Mail, AtSign, Lock } from 'lucide-react'
 import Welcome from './Welcome.jsx'
 import ShinyButton from './ShinyButton.jsx'
 import MeshGradient from './MeshGradient.jsx'
@@ -71,6 +71,17 @@ const previewNet = (h, amount, cases) => {
   const share = h.payout_basis === 'fixed' ? Number(h.fixed_fee) * n : gross * (h.payout_percentage / 100)
   const net = share - share * (h.tds_rate / 100) - share * (h.deduction_rate / 100)
   return { gross, share, net }
+}
+
+// Floating-label glass input for the auth screens.
+function Field({ id, label, icon: Icon, type = 'text', value, onChange, autoComplete, trailing }) {
+  return (
+    <div className="ff">
+      <input id={id} type={type} className="ff-input" placeholder=" " value={value} onChange={onChange} autoComplete={autoComplete} style={trailing ? { paddingRight: 34 } : undefined} />
+      <label htmlFor={id} className="ff-label"><Icon size={15} /> {label}</label>
+      {trailing}
+    </div>
+  )
 }
 
 const MoneyTiles = ({ m, subs = {} }) => (
@@ -1077,18 +1088,10 @@ function App() {
               <p>Revenue Reconciliation Platform</p>
             </div>
             <form className="login-form" onSubmit={handleLogin}>
-              <div className="login-field">
-                <label htmlFor="login-user">Username or Email</label>
-                <input id="login-user" className="form-input dark" value={loginForm.username} onChange={e => setLoginForm({ ...loginForm, username: e.target.value })} placeholder="Enter username" autoComplete="username" />
-              </div>
-              <div className="login-field">
-                <label htmlFor="login-pw">Password</label>
-                <div style={{ position: 'relative' }}>
-                  <input id="login-pw" className="form-input dark" type={showPw ? 'text' : 'password'} value={loginForm.password} onChange={e => setLoginForm({ ...loginForm, password: e.target.value })} placeholder="Enter password" style={{ paddingRight: 40 }} autoComplete="current-password" />
-                  <button type="button" className="password-toggle" aria-label={showPw ? 'Hide password' : 'Show password'} onClick={() => setShowPw(!showPw)}>{showPw ? <EyeOff size={18} /> : <Eye size={18} />}</button>
-                </div>
-              </div>
-              <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--sidebar-text)' }}>
+              <Field id="login-user" label="Username or Email" icon={User} value={loginForm.username} onChange={e => setLoginForm({ ...loginForm, username: e.target.value })} autoComplete="username" />
+              <Field id="login-pw" label="Password" icon={Lock} type={showPw ? 'text' : 'password'} value={loginForm.password} onChange={e => setLoginForm({ ...loginForm, password: e.target.value })} autoComplete="current-password"
+                trailing={<button type="button" className="ff-eye" aria-label={showPw ? 'Hide password' : 'Show password'} onClick={() => setShowPw(!showPw)}>{showPw ? <EyeOff size={17} /> : <Eye size={17} />}</button>} />
+              <label className="ff-remember">
                 <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} /> Remember me
               </label>
               {loginError && <div className="login-error" role="alert">{loginError}</div>}
@@ -1104,11 +1107,11 @@ function App() {
               <p>Set up your revenue tracking</p>
             </div>
             <form className="login-form" onSubmit={handleSignup}>
-              <div className="login-field"><label htmlFor="su-name">Full Name</label><input id="su-name" className="form-input dark" value={signupForm.name || ''} onChange={e => setSignupForm({ ...signupForm, name: e.target.value })} placeholder="Dr. Full Name" /></div>
-              <div className="login-field"><label htmlFor="su-email">Email</label><input id="su-email" className="form-input dark" type="email" value={signupForm.email || ''} onChange={e => setSignupForm({ ...signupForm, email: e.target.value })} placeholder="you@example.com" /></div>
-              <div className="login-field"><label htmlFor="su-user">Username</label><input id="su-user" className="form-input dark" value={signupForm.username || ''} onChange={e => setSignupForm({ ...signupForm, username: e.target.value })} placeholder="Choose a username" /></div>
-              <div className="login-field"><label htmlFor="su-pw">Password</label><input id="su-pw" className="form-input dark" type="password" value={signupForm.password || ''} onChange={e => setSignupForm({ ...signupForm, password: e.target.value })} placeholder="Min 6 characters" /></div>
-              <div className="login-field"><label htmlFor="su-pw2">Confirm Password</label><input id="su-pw2" className="form-input dark" type="password" value={signupForm.confirmPassword || ''} onChange={e => setSignupForm({ ...signupForm, confirmPassword: e.target.value })} placeholder="Confirm password" /></div>
+              <Field id="su-name" label="Full Name" icon={User} value={signupForm.name || ''} onChange={e => setSignupForm({ ...signupForm, name: e.target.value })} autoComplete="name" />
+              <Field id="su-email" label="Email" icon={Mail} type="email" value={signupForm.email || ''} onChange={e => setSignupForm({ ...signupForm, email: e.target.value })} autoComplete="email" />
+              <Field id="su-user" label="Username" icon={AtSign} value={signupForm.username || ''} onChange={e => setSignupForm({ ...signupForm, username: e.target.value })} autoComplete="username" />
+              <Field id="su-pw" label="Password" icon={Lock} type="password" value={signupForm.password || ''} onChange={e => setSignupForm({ ...signupForm, password: e.target.value })} autoComplete="new-password" />
+              <Field id="su-pw2" label="Confirm Password" icon={Lock} type="password" value={signupForm.confirmPassword || ''} onChange={e => setSignupForm({ ...signupForm, confirmPassword: e.target.value })} autoComplete="new-password" />
               {signupError && <div className="login-error" role="alert">{signupError}</div>}
               <ShinyButton type="submit" className="block">Create Account</ShinyButton>
             </form>

@@ -993,13 +993,67 @@ button { cursor: pointer; border: none; background: none; }
 .login-shell .login-card { position: relative; z-index: 1; }
 
 .login-card {
-  width: min(440px, 100%);
-  background: rgba(30,41,59,0.8);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: var(--radius-lg);
-  padding: 40px 32px;
-  box-shadow: 0 24px 60px rgba(0,0,0,0.4);
+  width: min(420px, 100%);
+  background: rgba(255,255,255,0.07);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 20px;
+  padding: 38px 34px;
+  box-shadow: 0 30px 70px rgba(2,6,23,0.55);
+}
+
+/* ── Floating-label glass fields ── */
+
+.ff { position: relative; }
+.ff-input {
+  display: block;
+  width: 100%;
+  padding: 10px 0;
+  font-size: 0.95rem;
+  color: #f8fafc;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid rgba(148,163,184,0.35);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.ff-input:focus { border-bottom-color: var(--blue); }
+.ff-label {
+  position: absolute;
+  left: 0;
+  top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.95rem;
+  color: #94a3b8;
+  pointer-events: none;
+  transform-origin: left center;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+.ff-input:focus + .ff-label,
+.ff-input:not(:placeholder-shown) + .ff-label {
+  transform: translateY(-22px) scale(0.82);
+  color: #93c5fd;
+}
+.ff-eye {
+  position: absolute;
+  right: 0;
+  top: 8px;
+  background: none;
+  border: 0;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 2px;
+}
+.ff-eye:hover { color: #f8fafc; }
+.ff-eye:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
+.ff-remember { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--sidebar-text); }
+.ff-input:-webkit-autofill,
+.ff-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #f8fafc;
+  transition: background-color 9999s ease-out;
 }
 
 .login-header {
@@ -1033,7 +1087,7 @@ button { cursor: pointer; border: none; background: none; }
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 26px;
 }
 
 .login-error {
