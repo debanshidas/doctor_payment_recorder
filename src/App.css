@@ -1356,6 +1356,40 @@ button { cursor: pointer; border: none; background: none; }
   .toast { animation: none; }
 }
 
+/* ── Metric info tooltip ── */
+
+.infotip { position: relative; display: inline-flex; align-items: center; margin-left: 5px; color: var(--muted); cursor: help; vertical-align: middle; }
+.infotip.dark { color: rgba(255,255,255,0.55); }
+.infotip:hover, .infotip:focus-visible { color: var(--blue); outline: none; }
+.infotip.dark:hover, .infotip.dark:focus-visible { color: #fff; }
+.infotip-pop {
+  position: absolute;
+  bottom: calc(100% + 9px);
+  left: -6px;
+  width: max-content;
+  max-width: 250px;
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.45;
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 9px 11px;
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(2,6,23,0.4);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 60;
+  pointer-events: none;
+  white-space: normal;
+}
+.infotip-pop::after { content: ''; position: absolute; top: 100%; left: 12px; border: 5px solid transparent; border-top-color: #0f172a; }
+.infotip:hover .infotip-pop, .infotip:focus-visible .infotip-pop { opacity: 1; visibility: visible; transform: translateY(0); }
+@media (prefers-reduced-motion: reduce) { .infotip-pop { transition: none; } }
+
 /* ── Dashboard bento stats ── */
 
 .bento {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Eye, EyeOff, LayoutDashboard, Building2, FileText, IndianRupee, AlertTriangle, LogOut, Menu, X, Plus, User, ChevronDown, ChevronRight, Receipt, CheckCircle2, ArrowLeft, ArrowRight, Trash2, Pencil, Mail, AtSign, Lock, LifeBuoy, MessageSquare, Paperclip } from 'lucide-react'
+import { Eye, EyeOff, LayoutDashboard, Building2, FileText, IndianRupee, AlertTriangle, LogOut, Menu, X, Plus, User, ChevronDown, ChevronRight, Receipt, CheckCircle2, ArrowLeft, ArrowRight, Trash2, Pencil, Mail, AtSign, Lock, LifeBuoy, MessageSquare, Paperclip, HelpCircle } from 'lucide-react'
 import Welcome from './Welcome.jsx'
 import ShinyButton from './ShinyButton.jsx'
 import InteractiveHoverButton from './InteractiveHoverButton.jsx'
@@ -116,6 +116,20 @@ function Field({ id, label, icon: Icon, type = 'text', value, onChange, autoComp
   )
 }
 
+const InfoTip = ({ text, dark }) => (
+  <span className={`infotip ${dark ? 'dark' : ''}`} tabIndex={0} role="note" aria-label={`How this is calculated: ${text}`}>
+    <HelpCircle size={13} />
+    <span className="infotip-pop" role="tooltip">{text}</span>
+  </span>
+)
+
+const METRIC_INFO = {
+  earned: 'Net expected from your entries: for each entry, doctor share minus TDS and deductions, added up. It is what hospitals owe you, not what has been paid.',
+  received: 'Total of payments you recorded as Fully Paid or Partially Paid — the money actually credited to you.',
+  underReview: 'Payments you recorded that are awaiting admin verification. Not counted as received yet.',
+  pending: 'Earned − Received − Under Review. The amount still to be settled.',
+}
+
 // Bento-style stat grid for the dashboard hero.
 const DashBento = ({ d }) => {
   const receivedPct = d.earned > 0 ? Math.min(100, (d.received / d.earned) * 100) : 0
@@ -123,14 +137,14 @@ const DashBento = ({ d }) => {
     <div className="bento">
       <div className="bento-primary">
         <div>
-          <span className="bento-kicker">Earned</span>
+          <span className="bento-kicker">Earned <InfoTip dark text={METRIC_INFO.earned} /></span>
           <div className="bento-num">{formatMoney(d.earned)}</div>
         </div>
         <p className="bento-caption">Net expected across {d.procedureCount} {d.procedureCount === 1 ? 'entry' : 'entries'} · {formatPct(d.collectionRate)} collected</p>
       </div>
       <div className="bento-a">
         <div>
-          <p className="bento-label">Received</p>
+          <p className="bento-label">Received <InfoTip text={METRIC_INFO.received} /></p>
           <p className="bento-stat text-green">{formatMoney(d.received)}</p>
         </div>
         <div className="bento-ring" style={{ '--pct': `${receivedPct}%` }}>
@@ -139,13 +153,13 @@ const DashBento = ({ d }) => {
       </div>
       <div className="bento-b">
         <p className="bento-stat amber">{formatMoney(d.underReview)}</p>
-        <p className="bento-label">Under Review</p>
+        <p className="bento-label">Under Review <InfoTip text={METRIC_INFO.underReview} /></p>
       </div>
       <div className="bento-c">
         <div className="bento-c-icon"><IndianRupee size={20} /></div>
         <div>
           <p className="bento-stat">{formatMoney(d.pending)}</p>
-          <p className="bento-label">Pending settlement</p>
+          <p className="bento-label">Pending settlement <InfoTip text={METRIC_INFO.pending} /></p>
         </div>
       </div>
     </div>
