@@ -1,6 +1,7 @@
 import { ArrowRight, Building2, IndianRupee, ShieldCheck } from 'lucide-react'
 import CinematicFooter from './CinematicFooter.jsx'
 import MeshGradient from './MeshGradient.jsx'
+import ShinyButton from './ShinyButton.jsx'
 import './welcome.css'
 
 const FEATURES = [
@@ -37,7 +38,7 @@ export default function Welcome({ onLogin, onSignup }) {
           <h1>Know exactly what every hospital owes you.</h1>
           <p>DocTrack turns your procedures into an expected-payout ledger, then checks each settlement against it — TDS, deductions and shortfalls included.</p>
           <div className="welcome-cta">
-            <button className="welcome-btn btn-noise large" onClick={onSignup}>Create free account <ArrowRight size={18} /></button>
+            <ShinyButton onClick={onSignup}>Create free account <ArrowRight size={18} /></ShinyButton>
             <button className="welcome-btn ghost large" onClick={onLogin}>I already have an account</button>
           </div>
           <div className="welcome-preview">
