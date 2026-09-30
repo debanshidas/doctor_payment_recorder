@@ -1363,83 +1363,219 @@ button { cursor: pointer; border: none; background: none; }
   grid-auto-rows: 1fr;
   gap: 16px;
   margin-bottom: 24px;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
 }
+
+/* Base card: hairline border, soft two-layer shadow, subtle lift on hover.
+   Metric tints are applied below via .bento .bento-x (0,2,0) so nothing here flattens them. */
 .bento > div {
-  border-radius: 20px;
-  padding: 24px;
-  border: 1px solid var(--border);
+  position: relative;
+  border-radius: 18px;
+  padding: 22px 24px;
+  border: 1px solid var(--border-light);
   background: var(--surface);
-  box-shadow: var(--shadow-xs);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 16px -10px rgba(15, 23, 42, 0.10);
+  transition: box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+  overflow: hidden;
 }
-.bento > .bento-primary {
-  border: none;
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+.bento > div:hover {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 12px 28px -14px rgba(15, 23, 42, 0.18);
+  border-color: var(--border);
+  transform: translateY(-1px);
 }
-.bento-primary {
+
+/* HERO: Earned. Specificity 0,2,0 beats `.bento > div` 0,1,1, so the dark
+   gradient always wins and the white numeral can never render on white. */
+.bento .bento-primary {
   grid-column: span 3;
   grid-row: span 2;
-  position: relative;
-  overflow: hidden;
+  min-height: 240px;
+  border: none;
+  padding: 28px;
   color: #fff;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 240px;
+  background:
+    radial-gradient(120% 90% at 100% 0%, rgba(59, 130, 246, 0.32) 0%, transparent 55%),
+    radial-gradient(90% 80% at 0% 100%, rgba(16, 185, 129, 0.16) 0%, transparent 60%),
+    linear-gradient(158deg, #0f172a 0%, #1e293b 100%);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12), 0 20px 42px -22px rgba(15, 23, 42, 0.6);
 }
+.bento .bento-primary:hover { transform: none; }
+/* faint precision grid, masked to the top-right corner */
 .bento-primary::before {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: repeating-linear-gradient(45deg, rgba(255,255,255,0.35) 0 1px, transparent 1px 10px);
-  opacity: 0.3;
-  -webkit-mask-image: radial-gradient(ellipse 80% 50% at 100% 0%, #000 70%, transparent 110%);
-  mask-image: radial-gradient(ellipse 80% 50% at 100% 0%, #000 70%, transparent 110%);
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 26px 26px;
+  -webkit-mask-image: radial-gradient(ellipse 75% 60% at 100% 0%, #000 30%, transparent 100%);
+  mask-image: radial-gradient(ellipse 75% 60% at 100% 0%, #000 30%, transparent 100%);
 }
 .bento-primary > * { position: relative; z-index: 1; }
+
 .bento-kicker {
-  display: inline-block;
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: rgba(255,255,255,0.15);
-  color: rgba(255,255,255,0.85);
-  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  margin-bottom: 18px;
+}
+.bento-kicker::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.22);
+}
+.bento-num {
+  color: #fff;
+  font-size: clamp(2.9rem, 5.2vw, 3.85rem);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 0.98;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 14px rgba(2, 6, 23, 0.35);
+}
+.bento-caption {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1.45;
+  max-width: 24rem;
+  margin: 0;
+}
+.bento-primary ::selection { background: rgba(255, 255, 255, 0.24); }
+
+/* ── Received (green tint + corner glow, ring) ── */
+.bento .bento-a {
+  grid-column: span 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background:
+    linear-gradient(180deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.015) 100%),
+    var(--surface);
+  border-color: rgba(16, 185, 129, 0.22);
+}
+.bento .bento-a::after {
+  content: '';
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.16) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* ── Under Review (amber tint, small square) ── */
+.bento .bento-b {
+  grid-column: span 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 6px;
+  background:
+    linear-gradient(180deg, rgba(245, 158, 11, 0.10) 0%, rgba(245, 158, 11, 0.02) 100%),
+    var(--surface);
+  border-color: rgba(245, 158, 11, 0.24);
+}
+
+/* ── Pending settlement (blue tint, has icon) ── */
+.bento .bento-c {
+  grid-column: span 2;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background:
+    linear-gradient(135deg, rgba(59, 130, 246, 0.09) 0%, rgba(59, 130, 246, 0.02) 100%),
+    var(--surface-soft);
+  border-color: rgba(59, 130, 246, 0.22);
+}
+
+/* ── Shared figure / label typography (hero > stat > label > caption) ── */
+.bento-label {
+  font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 2px;
-  margin-bottom: 16px;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 0;
 }
-.bento-num { color: #fff; font-size: 3.4rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 2px 10px rgba(2,6,23,0.25); }
-.bento-caption { color: rgba(255,255,255,0.95); font-size: 0.9rem; max-width: 24rem; }
-.bento-primary ::selection { background: rgba(255,255,255,0.3); }
+.bento-stat {
+  font-size: 1.9rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  margin: 0 0 2px;
+}
+/* AA-safe darker accent shades for coloured figures on white */
+.bento-stat.text-green { color: #059669; }
+.bento-stat.amber { color: #b45309; }
+.bento .bento-c .bento-stat { color: #1d4ed8; }
 
-.bento-a { grid-column: span 3; display: flex; align-items: center; justify-content: space-between; }
-.bento-b { grid-column: span 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 4px; }
-.bento-c { grid-column: span 2; display: flex; align-items: center; gap: 16px; background: var(--surface-soft) !important; }
-
-.bento-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
-.bento-stat { font-size: 1.9rem; font-weight: 700; color: var(--text); letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.bento-stat.text-green { color: var(--green); }
-.bento-stat.amber { color: var(--amber); }
+/* ── Received progress ring (green) ── */
 .bento-ring {
-  width: 60px;
-  height: 60px;
+  width: 62px;
+  height: 62px;
   border-radius: 50%;
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  background: radial-gradient(closest-side, var(--surface) 70%, transparent 71% 100%),
-    conic-gradient(var(--green) var(--pct), var(--border) 0);
+  background:
+    radial-gradient(closest-side, var(--surface) 73%, transparent 74% 100%),
+    conic-gradient(var(--green) var(--pct), rgba(16, 185, 129, 0.16) 0);
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.14) inset;
 }
-.bento-ring span { font-size: 0.8rem; font-weight: 700; color: var(--text); }
-.bento-c-icon { width: 44px; height: 44px; border-radius: 50%; background: var(--surface); box-shadow: var(--shadow-xs); display: grid; place-items: center; color: var(--blue); flex-shrink: 0; }
+.bento-ring span {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #059669;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Pending icon chip (blue gradient, inherits white icon via currentColor) ── */
+.bento-c-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  box-shadow: 0 6px 14px -6px rgba(37, 99, 235, 0.6);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bento > div { transition: none; }
+  .bento > div:hover { transform: none; }
+}
 
 @media (max-width: 820px) {
   .bento { grid-template-columns: repeat(2, 1fr); }
-  .bento-primary { grid-column: span 2; grid-row: auto; }
-  .bento-a { grid-column: span 2; }
-  .bento-b { grid-column: span 1; }
-  .bento-c { grid-column: span 1; }
+  .bento .bento-primary { grid-column: span 2; grid-row: auto; min-height: 190px; }
+  .bento .bento-a { grid-column: span 2; }
+  .bento .bento-b { grid-column: span 1; }
+  .bento .bento-c { grid-column: span 1; }
+  .bento-num { font-size: clamp(2.6rem, 11vw, 3.4rem); }
 }
 
 /* ── Stat strip (dashboard / reconciliation) ── */
