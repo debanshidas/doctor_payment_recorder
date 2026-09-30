@@ -1,5 +1,6 @@
 import { ArrowRight, Building2, IndianRupee, ShieldCheck } from 'lucide-react'
 import CinematicFooter from './CinematicFooter.jsx'
+import MeshGradient from './MeshGradient.jsx'
 import './welcome.css'
 
 const FEATURES = [
@@ -18,6 +19,9 @@ export default function Welcome({ onLogin, onSignup }) {
   return (
     <div className="welcome">
       <main className="welcome-main">
+        <div className="welcome-top">
+        <MeshGradient className="welcome-mesh" />
+        <div className="welcome-mesh-overlay" aria-hidden="true" />
         <header className="welcome-nav">
           <div className="welcome-brand">
             <img src="doctrack-logo.png" alt="" />
@@ -45,6 +49,7 @@ export default function Welcome({ onLogin, onSignup }) {
             <div className="welcome-preview-row net"><span>Net expected payout</span><span>₹35,200</span></div>
           </div>
         </section>
+        </div>
 
         <section className="welcome-section feature-cards">
           <div className="feature-cards-intro">
