@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, Building2, CreditCard, FileBarChart, ScrollText, LogOut, Shield, Eye, EyeOff, CheckCircle, Clock, Settings } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { LayoutDashboard, Users, Building2, CreditCard, FileBarChart, ScrollText, LogOut, Shield, Eye, EyeOff, CheckCircle, Clock, Settings, LifeBuoy } from 'lucide-react';
 
 const API = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '') + '/api';
 
@@ -475,12 +475,193 @@ function SettingsPage({ session }) {
   );
 }
 
+// ── Query Management ──
+
+const Q_STATUSES = ['Open', 'In Progress', 'Awaiting User Response', 'Resolved', 'Closed']
+const Q_CATEGORIES = ['Technical Issue', 'Software Functionality', 'Payment Discrepancy', 'Account Issue', 'Feature Request', 'General Query']
+const Q_PRIORITIES = ['Low', 'Medium', 'High']
+const qCls = (s) => ({ 'Open': 'q-open', 'In Progress': 'q-inprogress', 'Awaiting User Response': 'q-awaiting', 'Resolved': 'q-resolved', 'Closed': 'q-closed' }[s] || 'q-open')
+const pCls = (p) => ({ High: 'q-high', Medium: 'q-medium', Low: 'q-low' }[p] || 'q-medium')
+const QB = ({ status }) => <span className={`qbadge ${qCls(status)}`}>{status}</span>
+const PB = ({ priority }) => <span className={`qbadge ${pCls(priority)}`}>{priority}</span>
+const parseTs = (s) => new Date(String(s).includes('T') ? s : String(s).replace(' ', 'T') + 'Z')
+const fmtDT = (d) => { if (!d) return '—'; const t = parseTs(d); return isNaN(t) ? d : t.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) }
+const Q_SYS = ['Query Created', 'Admin Assigned', 'Status Changed', 'Query Resolved', 'Query Reopened', 'Query Closed']
+function adminTimeline(q) {
+  const items = []
+  for (const h of (q.history || [])) { if (!Q_SYS.includes(h.action)) continue; items.push({ kind: 'system', title: h.action + (h.actor_name ? ` · ${h.actor_name}` : ''), text: h.detail || null, status: h.new_status || null, at: h.created_at }) }
+  for (const m of (q.messages || [])) { const kind = m.is_internal ? 'internal' : m.sender_role === 'admin' ? 'admin' : 'user'; items.push({ kind, title: m.is_internal ? 'Internal Note' : m.sender_role === 'admin' ? `${m.sender_name} · Support` : m.sender_name, text: m.message, at: m.created_at }) }
+  return items.sort((a, b) => parseTs(a.at) - parseTs(b.at))
+}
+
+function QueryManagementPage() {
+  const [summary, setSummary] = useState(null)
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [f, setF] = useState({ search: '', status: '', category: '', priority: '', from: '', to: '', sort: 'newest' })
+  const [detail, setDetail] = useState(null)
+  const [assignees, setAssignees] = useState([])
+  const [respond, setRespond] = useState('')
+  const [note, setNote] = useState('')
+
+  const loadList = useCallback(async () => {
+    setLoading(true)
+    const qs = new URLSearchParams()
+    Object.entries(f).forEach(([k, v]) => { if (v) qs.set(k, v) })
+    try {
+      const [s, r] = await Promise.all([api('/admin/queries/summary'), api('/admin/queries?' + qs.toString())])
+      setSummary(s); setRows(r)
+    } catch { /* ignore */ }
+    setLoading(false)
+  }, [f])
+  useEffect(() => { loadList() }, [loadList])
+  useEffect(() => { api('/admin/queries/assignees').then(setAssignees).catch(() => {}) }, [])
+
+  async function openDetail(id) { setDetail({ loading: true }); setRespond(''); setNote(''); try { setDetail(await api('/admin/queries/' + id)) } catch (e) { setDetail({ error: e.message }) } }
+  async function refresh() { if (detail?.id) { try { setDetail(await api('/admin/queries/' + detail.id)) } catch {} } loadList() }
+  const act = (fn) => async (...a) => { try { await fn(...a); await refresh() } catch (e) { alert(e.message) } }
+  const changeStatus = act((s) => api(`/admin/queries/${detail.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: s }) }))
+  const assign = act((v) => api(`/admin/queries/${detail.id}/assign`, { method: 'PATCH', body: JSON.stringify({ assigned_to: v ? Number(v) : null }) }))
+  const sendRespond = act(async () => { if (!respond.trim()) return; await api(`/admin/queries/${detail.id}/respond`, { method: 'POST', body: JSON.stringify({ message: respond }) }); setRespond('') })
+  const sendNote = act(async () => { if (!note.trim()) return; await api(`/admin/queries/${detail.id}/internal-note`, { method: 'POST', body: JSON.stringify({ message: note }) }); setNote('') })
+  const clearFilters = () => setF({ search: '', status: '', category: '', priority: '', from: '', to: '', sort: 'newest' })
+  const active = f.search || f.status || f.category || f.priority || f.from || f.to || f.sort !== 'newest'
+
+  const cards = summary ? [
+    { label: 'Total Queries', value: summary.total, cls: 'indigo' },
+    { label: 'Open', value: summary.open, cls: 'blue' },
+    { label: 'In Progress', value: summary.inProgress, cls: 'amber' },
+    { label: 'Awaiting Response', value: summary.awaiting, cls: 'purple' },
+    { label: 'Resolved', value: summary.resolved, cls: 'green' },
+  ] : []
+
+  return (
+    <>
+      <div className="page-header"><h1>Query Management</h1><p>Support requests from doctors</p></div>
+
+      <div className="q-summary">
+        {cards.map(c => (
+          <div key={c.label} className={`q-summary-card ${c.cls}`}>
+            <span className="q-summary-value">{c.value}</span>
+            <span className="q-summary-label">{c.label}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="q-toolbar">
+        <input className="q-input" placeholder="Search ID, subject or user…" value={f.search} onChange={e => setF({ ...f, search: e.target.value })} />
+        <select className="q-input" value={f.status} onChange={e => setF({ ...f, status: e.target.value })}><option value="">All statuses</option>{Q_STATUSES.map(s => <option key={s}>{s}</option>)}</select>
+        <select className="q-input" value={f.category} onChange={e => setF({ ...f, category: e.target.value })}><option value="">All categories</option>{Q_CATEGORIES.map(s => <option key={s}>{s}</option>)}</select>
+        <select className="q-input" value={f.priority} onChange={e => setF({ ...f, priority: e.target.value })}><option value="">All priorities</option>{Q_PRIORITIES.map(s => <option key={s}>{s}</option>)}</select>
+        <input className="q-input" type="date" value={f.from} onChange={e => setF({ ...f, from: e.target.value })} title="From date" />
+        <input className="q-input" type="date" value={f.to} onChange={e => setF({ ...f, to: e.target.value })} title="To date" />
+        <select className="q-input" value={f.sort} onChange={e => setF({ ...f, sort: e.target.value })}>
+          <option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="priority_high">Highest priority</option><option value="priority_low">Lowest priority</option>
+        </select>
+        {active && <button className="btn-sm btn-toggle" onClick={clearFilters}>Clear</button>}
+      </div>
+
+      <div className="card">
+        {loading ? <div className="loading">Loading queries…</div> : rows.length === 0 ? (
+          <div className="empty-state">{active ? 'No queries match these filters.' : 'No support queries found.'}</div>
+        ) : (
+          <table className="data-table">
+            <thead><tr><th>Query ID</th><th>User</th><th>Subject</th><th>Category</th><th>Priority</th><th>Submitted</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+              {rows.map(q => (
+                <tr key={q.id}>
+                  <td>{q.query_code}</td>
+                  <td>{q.user_name}</td>
+                  <td>{q.subject}</td>
+                  <td>{q.category}</td>
+                  <td><PB priority={q.priority} /></td>
+                  <td>{fmtDT(q.created_at)}</td>
+                  <td><QB status={q.status} /></td>
+                  <td><button className="btn-sm btn-toggle" onClick={() => openDetail(q.id)}>View</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {detail && (
+        <div className="modal-overlay" onClick={() => setDetail(null)}>
+          <div className="modal q-drawer" onClick={e => e.stopPropagation()}>
+            {detail.loading ? <div className="loading">Loading…</div> : detail.error ? <div className="empty-state">{detail.error}</div> : (<>
+              <div className="modal-header"><h3>{detail.query_code}</h3><button className="btn-ghost" onClick={() => setDetail(null)}>✕</button></div>
+              <div className="q-drawer-body">
+                <div className="q-drawer-main">
+                  <div className="q-detail-head">
+                    <div><h2 className="q-subject">{detail.subject}</h2><div className="q-meta">{detail.category} · <PB priority={detail.priority} /> · {fmtDT(detail.created_at)}</div></div>
+                    <QB status={detail.status} />
+                  </div>
+                  <div className="q-user-row">{detail.user_name} · {detail.user_email}</div>
+                  <p className="q-description">{detail.description}</p>
+                  {detail.attachment_data && <a className="q-attachment" href={detail.attachment_data} target="_blank" rel="noreferrer">📎 {detail.attachment_name || 'Attachment'}</a>}
+
+                  <h4 className="q-sub">Conversation & History</h4>
+                  <div className="q-timeline">
+                    {adminTimeline(detail).map((t, i) => (
+                      <div key={i} className={`q-tl ${t.kind}`}>
+                        <div className="q-tl-dot" />
+                        <div className="q-tl-body">
+                          <div className="q-tl-head"><strong>{t.title}</strong><span>{fmtDT(t.at)}</span></div>
+                          {t.text && <div className="q-tl-text">{t.text}</div>}
+                          {t.status && <div style={{ marginTop: 6 }}><QB status={t.status} /></div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="q-drawer-side">
+                  <label className="q-side-label">Status</label>
+                  <select className="q-input" value={detail.status} onChange={e => changeStatus(e.target.value)}>{Q_STATUSES.map(s => <option key={s}>{s}</option>)}</select>
+
+                  <label className="q-side-label">Assign to</label>
+                  <select className="q-input" value={detail.assigned_to || ''} onChange={e => assign(e.target.value)}>
+                    <option value="">Unassigned</option>
+                    {assignees.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+
+                  <div className="q-side-actions">
+                    {(detail.status === 'Resolved' || detail.status === 'Closed')
+                      ? <button className="btn-sm btn-toggle" onClick={() => changeStatus('Open')}>Reopen Query</button>
+                      : <button className="btn-sm btn-approve" onClick={() => changeStatus('Resolved')}>Mark as Resolved</button>}
+                  </div>
+
+                  <label className="q-side-label">Respond to user</label>
+                  <textarea className="q-input" rows={3} value={respond} onChange={e => setRespond(e.target.value)} placeholder="Write a response…" />
+                  <button className="btn-sm btn-approve q-full" disabled={!respond.trim()} onClick={sendRespond}>Send Response</button>
+
+                  <label className="q-side-label">Internal note <span className="q-internal-tag">admins only</span></label>
+                  <textarea className="q-input" rows={2} value={note} onChange={e => setNote(e.target.value)} placeholder="Private note…" />
+                  <button className="btn-sm btn-toggle q-full" disabled={!note.trim()} onClick={sendNote}>Add Internal Note</button>
+                </div>
+              </div>
+            </>)}
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
 // ── Main App ──
 export default function App() {
   const [session, setSession] = useState(() => {
     try { return JSON.parse(localStorage.getItem('adminSession')); } catch { return null; }
   });
   const [page, setPage] = useState('dashboard');
+  const [queryBadge, setQueryBadge] = useState(0);
+
+  useEffect(() => {
+    if (!session) return;
+    let live = true;
+    api('/admin/queries/summary').then(s => { if (live) setQueryBadge((s.open || 0) + (s.inProgress || 0)); }).catch(() => {});
+    return () => { live = false; };
+  }, [session, page]);
 
   function logout() {
     localStorage.removeItem('adminSession');
@@ -490,14 +671,17 @@ export default function App() {
 
   if (!session) return <LoginPage onLogin={setSession} />;
 
-  const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'users', label: 'Users', icon: Users },
-    { id: 'hospitals', label: 'Hospitals', icon: Building2 },
-    { id: 'payments', label: 'Payments', icon: CreditCard },
-    { id: 'reports', label: 'Reports', icon: FileBarChart },
-    { id: 'audit', label: 'Audit Logs', icon: ScrollText },
-    { id: 'settings', label: 'Settings', icon: Settings },
+  const navSections = [
+    { title: 'Overview', items: [{ id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard }] },
+    { title: 'Management', items: [
+      { id: 'users', label: 'Users', icon: Users },
+      { id: 'hospitals', label: 'Hospitals', icon: Building2 },
+      { id: 'payments', label: 'Payments', icon: CreditCard },
+      { id: 'reports', label: 'Reports', icon: FileBarChart },
+      { id: 'audit', label: 'Audit Logs', icon: ScrollText },
+    ] },
+    { title: 'Support', items: [{ id: 'queries', label: 'Query Management', icon: LifeBuoy, badge: queryBadge }] },
+    { title: 'System', items: [{ id: 'settings', label: 'Settings', icon: Settings }] },
   ];
 
   const pages = {
@@ -507,6 +691,7 @@ export default function App() {
     payments: PaymentsPage,
     reports: ReportsPage,
     audit: AuditLogsPage,
+    queries: QueryManagementPage,
     settings: SettingsPage,
   };
 
@@ -520,9 +705,15 @@ export default function App() {
           <span>Welcome, {session.name}</span>
         </div>
         <nav className="sidebar-nav">
-          {navItems.map(item => (
-            <div key={item.id} className={`nav-item ${page === item.id ? 'active' : ''}`} onClick={() => setPage(item.id)}>
-              <item.icon size={18} /> {item.label}
+          {navSections.map(sec => (
+            <div key={sec.title} className="nav-section">
+              <div className="nav-section-title">{sec.title}</div>
+              {sec.items.map(item => (
+                <div key={item.id} className={`nav-item ${page === item.id ? 'active' : ''}`} onClick={() => setPage(item.id)}>
+                  <item.icon size={18} /> <span>{item.label}</span>
+                  {item.badge > 0 && <span className="nav-badge">{item.badge}</span>}
+                </div>
+              ))}
             </div>
           ))}
         </nav>

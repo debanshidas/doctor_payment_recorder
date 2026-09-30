@@ -5,7 +5,7 @@ import crypto from 'crypto';
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '4mb' }));
 
 const dbAll = (query, params = []) => db.all(query, params);
 const dbRun = (query, params = []) => db.run(query, params);
@@ -742,6 +742,226 @@ app.get('/', (req, res) => res.json({
     database: db.label.startsWith('Turso') ? 'turso' : 'local-file',
     ...(db.error && { database_error: db.error })
 }));
+
+// ── Support Queries ──
+
+const QUERY_STATUSES = ['Open', 'In Progress', 'Awaiting User Response', 'Resolved', 'Closed'];
+const QUERY_CATEGORIES = ['Technical Issue', 'Software Functionality', 'Payment Discrepancy', 'Account Issue', 'Feature Request', 'General Query'];
+const QUERY_PRIORITIES = ['Low', 'Medium', 'High'];
+
+const pad2 = (n) => String(n).padStart(2, '0');
+async function nextQueryCode() {
+    const d = new Date();
+    const prefix = `QRY-${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}-`;
+    const row = await dbGet('SELECT COUNT(*) as c FROM queries WHERE query_code LIKE ?', [prefix + '%']);
+    return prefix + String((row.c || 0) + 1).padStart(3, '0');
+}
+async function addQueryHistory(qid, actorId, role, action, oldS, newS, detail) {
+    await dbRun('INSERT INTO query_history (query_id, actor_id, actor_role, action, old_status, new_status, detail) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [qid, actorId, role, action, oldS || null, newS || null, detail || null]);
+}
+function validateAttachment(att) {
+    if (!att || !att.dataUri) return { ok: true, name: null, data: null };
+    if (typeof att.dataUri !== 'string') return { ok: false, error: 'Invalid attachment.' };
+    const m = /^data:(image\/(?:png|jpe?g|webp));base64,([A-Za-z0-9+/=]+)$/.exec(att.dataUri);
+    if (!m) return { ok: false, error: 'Attachment must be a PNG, JPEG or WebP image.' };
+    const bytes = Math.floor(m[2].length * 3 / 4);
+    if (bytes > 2 * 1024 * 1024) return { ok: false, error: 'Attachment must be under 2 MB.' };
+    const safeName = String(att.name || 'attachment').replace(/[^\w.\- ]/g, '').slice(0, 120) || 'attachment';
+    return { ok: true, name: safeName, data: att.dataUri };
+}
+
+// User: create a query
+app.post('/api/queries', auth, async (req, res) => {
+    const { subject, category, description, priority, attachment } = req.body;
+    if (!subject?.trim() || !category || !description?.trim() || !priority) return res.status(400).json({ error: 'Subject, category, description and priority are required.' });
+    if (!QUERY_CATEGORIES.includes(category)) return res.status(400).json({ error: 'Invalid category.' });
+    if (!QUERY_PRIORITIES.includes(priority)) return res.status(400).json({ error: 'Invalid priority.' });
+    const att = validateAttachment(attachment);
+    if (!att.ok) return res.status(400).json({ error: att.error });
+    try {
+        let lastID;
+        for (let i = 0; i < 5; i++) {
+            const code = await nextQueryCode();
+            try {
+                const r = await dbRun(
+                    'INSERT INTO queries (query_code, user_id, subject, category, description, priority, status, attachment_name, attachment_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [code, req.userId, subject.trim(), category, description.trim(), priority, 'Open', att.name, att.data]);
+                lastID = r.lastID;
+                break;
+            } catch (e) { if (!String(e.message).includes('UNIQUE')) throw e; }
+        }
+        if (!lastID) return res.status(500).json({ error: 'Could not generate a query ID, please retry.' });
+        await addQueryHistory(lastID, req.userId, 'doctor', 'Query Created', null, 'Open', null);
+        const q = await dbGet('SELECT id, query_code, subject, category, priority, status, created_at FROM queries WHERE id = ?', [lastID]);
+        res.json(q);
+    } catch (err) { res.status(500).json({ error: 'Failed to submit query.' }); }
+});
+
+// User: own queries
+app.get('/api/queries/my', auth, async (req, res) => {
+    try {
+        const rows = await dbAll(
+            `SELECT q.id, q.query_code, q.subject, q.category, q.priority, q.status, q.created_at, q.updated_at,
+                    a.name as assigned_to_name
+             FROM queries q LEFT JOIN users a ON q.assigned_to = a.id
+             WHERE q.user_id = ? ORDER BY q.created_at DESC`, [req.userId]);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: 'Failed to load queries.' }); }
+});
+
+app.get('/api/queries/unread', auth, async (req, res) => {
+    try {
+        const r = await dbGet(`SELECT COUNT(*) as c FROM queries WHERE user_id = ? AND status = 'Awaiting User Response'`, [req.userId]);
+        res.json({ count: r.c || 0 });
+    } catch (err) { res.json({ count: 0 }); }
+});
+
+// User: own query detail (excludes internal notes)
+app.get('/api/queries/:id', auth, async (req, res) => {
+    try {
+        const q = await dbGet(`SELECT q.*, a.name as assigned_to_name FROM queries q LEFT JOIN users a ON q.assigned_to = a.id WHERE q.id = ? AND q.user_id = ?`, [req.params.id, req.userId]);
+        if (!q) return res.status(404).json({ error: 'Query not found.' });
+        const messages = await dbAll(
+            `SELECT m.sender_role, m.message, m.created_at, u.name as sender_name
+             FROM query_messages m JOIN users u ON m.sender_id = u.id
+             WHERE m.query_id = ? AND m.is_internal = 0 ORDER BY m.created_at`, [q.id]);
+        const history = await dbAll(
+            `SELECT action, old_status, new_status, detail, actor_role, created_at FROM query_history
+             WHERE query_id = ? AND action != 'Internal Note' ORDER BY created_at`, [q.id]);
+        res.json({ ...q, messages, history });
+    } catch (err) { res.status(500).json({ error: 'Failed to load query.' }); }
+});
+
+// User: reply to own query
+app.post('/api/queries/:id/messages', auth, async (req, res) => {
+    const { message } = req.body;
+    if (!message?.trim()) return res.status(400).json({ error: 'Message is required.' });
+    try {
+        const q = await dbGet('SELECT * FROM queries WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
+        if (!q) return res.status(404).json({ error: 'Query not found.' });
+        if (q.status === 'Closed') return res.status(400).json({ error: 'This query is closed. Reopen it from support if needed.' });
+        await dbRun('INSERT INTO query_messages (query_id, sender_id, sender_role, message, is_internal) VALUES (?, ?, ?, ?, 0)', [q.id, req.userId, 'doctor', message.trim()]);
+        const newStatus = (q.status === 'Awaiting User Response' || q.status === 'Resolved') ? 'In Progress' : q.status;
+        await dbRun('UPDATE queries SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [newStatus, q.id]);
+        await addQueryHistory(q.id, req.userId, 'doctor', 'User Response', newStatus !== q.status ? q.status : null, newStatus !== q.status ? newStatus : null, null);
+        res.json({ success: true, status: newStatus });
+    } catch (err) { res.status(500).json({ error: 'Failed to send reply.' }); }
+});
+
+// Admin: summary counts
+app.get('/api/admin/queries/summary', adminAuth, async (req, res) => {
+    try {
+        const rows = await dbAll('SELECT status, COUNT(*) as c FROM queries GROUP BY status');
+        const by = Object.fromEntries(rows.map(r => [r.status, r.c]));
+        res.json({ total: rows.reduce((s, r) => s + r.c, 0), open: by['Open'] || 0, inProgress: by['In Progress'] || 0, awaiting: by['Awaiting User Response'] || 0, resolved: by['Resolved'] || 0, closed: by['Closed'] || 0 });
+    } catch (err) { res.status(500).json({ error: 'Failed to load summary.' }); }
+});
+
+app.get('/api/admin/queries/assignees', adminAuth, async (req, res) => {
+    try {
+        const rows = await dbAll(`SELECT id, name, username FROM users WHERE role = 'admin' AND status = 'active' ORDER BY name`);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: 'Failed.' }); }
+});
+
+// Admin: all queries with search/filter/sort
+app.get('/api/admin/queries', adminAuth, async (req, res) => {
+    const { status, category, priority, search, from, to, sort } = req.query;
+    try {
+        const where = [], params = [];
+        if (status && QUERY_STATUSES.includes(status)) { where.push('q.status = ?'); params.push(status); }
+        if (category && QUERY_CATEGORIES.includes(category)) { where.push('q.category = ?'); params.push(category); }
+        if (priority && QUERY_PRIORITIES.includes(priority)) { where.push('q.priority = ?'); params.push(priority); }
+        if (from) { where.push('q.created_at >= ?'); params.push(from + ' 00:00:00'); }
+        if (to) { where.push('q.created_at <= ?'); params.push(to + ' 23:59:59'); }
+        if (search) { where.push('(q.query_code LIKE ? OR q.subject LIKE ? OR u.name LIKE ?)'); const s = '%' + search + '%'; params.push(s, s, s); }
+        let order = 'q.created_at DESC';
+        if (sort === 'oldest') order = 'q.created_at ASC';
+        else if (sort === 'priority_high') order = "CASE q.priority WHEN 'High' THEN 3 WHEN 'Medium' THEN 2 ELSE 1 END DESC, q.created_at DESC";
+        else if (sort === 'priority_low') order = "CASE q.priority WHEN 'High' THEN 3 WHEN 'Medium' THEN 2 ELSE 1 END ASC, q.created_at DESC";
+        const rows = await dbAll(
+            `SELECT q.id, q.query_code, q.subject, q.category, q.priority, q.status, q.created_at, q.assigned_to,
+                    u.name as user_name, u.email as user_email, a.name as assigned_to_name
+             FROM queries q JOIN users u ON q.user_id = u.id LEFT JOIN users a ON q.assigned_to = a.id
+             ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY ${order}`, params);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: 'Failed to load queries.' }); }
+});
+
+// Admin: full detail (includes internal notes)
+app.get('/api/admin/queries/:id', adminAuth, async (req, res) => {
+    try {
+        const q = await dbGet(
+            `SELECT q.*, u.name as user_name, u.email as user_email, a.name as assigned_to_name
+             FROM queries q JOIN users u ON q.user_id = u.id LEFT JOIN users a ON q.assigned_to = a.id WHERE q.id = ?`, [req.params.id]);
+        if (!q) return res.status(404).json({ error: 'Query not found.' });
+        const messages = await dbAll(
+            `SELECT m.sender_role, m.message, m.is_internal, m.created_at, u.name as sender_name
+             FROM query_messages m JOIN users u ON m.sender_id = u.id WHERE m.query_id = ? ORDER BY m.created_at`, [q.id]);
+        const history = await dbAll(
+            `SELECT h.action, h.old_status, h.new_status, h.detail, h.actor_role, h.created_at, u.name as actor_name
+             FROM query_history h LEFT JOIN users u ON h.actor_id = u.id WHERE h.query_id = ? ORDER BY h.created_at`, [q.id]);
+        res.json({ ...q, messages, history });
+    } catch (err) { res.status(500).json({ error: 'Failed to load query.' }); }
+});
+
+app.patch('/api/admin/queries/:id/status', adminAuth, async (req, res) => {
+    const { status } = req.body;
+    if (!QUERY_STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status.' });
+    try {
+        const q = await dbGet('SELECT * FROM queries WHERE id = ?', [req.params.id]);
+        if (!q) return res.status(404).json({ error: 'Query not found.' });
+        const extra = status === 'Resolved' ? ', resolved_at = CURRENT_TIMESTAMP' : (status === 'Open' ? ', resolved_at = NULL' : '');
+        await dbRun(`UPDATE queries SET status = ?, updated_at = CURRENT_TIMESTAMP ${extra} WHERE id = ?`, [status, q.id]);
+        const reopen = status === 'Open' && (q.status === 'Resolved' || q.status === 'Closed');
+        const action = status === 'Resolved' ? 'Query Resolved' : reopen ? 'Query Reopened' : status === 'Closed' ? 'Query Closed' : 'Status Changed';
+        await addQueryHistory(q.id, req.userId, 'admin', action, q.status, status, null);
+        res.json({ success: true, status });
+    } catch (err) { res.status(500).json({ error: 'Failed to change status.' }); }
+});
+
+app.patch('/api/admin/queries/:id/assign', adminAuth, async (req, res) => {
+    const { assigned_to } = req.body;
+    try {
+        const q = await dbGet('SELECT id FROM queries WHERE id = ?', [req.params.id]);
+        if (!q) return res.status(404).json({ error: 'Query not found.' });
+        let name = null;
+        if (assigned_to) {
+            const a = await dbGet(`SELECT name FROM users WHERE id = ? AND role = 'admin'`, [assigned_to]);
+            if (!a) return res.status(400).json({ error: 'Invalid assignee.' });
+            name = a.name;
+        }
+        await dbRun('UPDATE queries SET assigned_to = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [assigned_to || null, req.params.id]);
+        await addQueryHistory(req.params.id, req.userId, 'admin', 'Admin Assigned', null, null, name ? `Assigned to ${name}` : 'Unassigned');
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'Failed to assign.' }); }
+});
+
+app.post('/api/admin/queries/:id/respond', adminAuth, async (req, res) => {
+    const { message } = req.body;
+    if (!message?.trim()) return res.status(400).json({ error: 'Response is required.' });
+    try {
+        const q = await dbGet('SELECT * FROM queries WHERE id = ?', [req.params.id]);
+        if (!q) return res.status(404).json({ error: 'Query not found.' });
+        await dbRun('INSERT INTO query_messages (query_id, sender_id, sender_role, message, is_internal) VALUES (?, ?, ?, ?, 0)', [q.id, req.userId, 'admin', message.trim()]);
+        await dbRun("UPDATE queries SET status = 'Awaiting User Response', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [q.id]);
+        await addQueryHistory(q.id, req.userId, 'admin', 'Admin Response', q.status, 'Awaiting User Response', null);
+        res.json({ success: true, status: 'Awaiting User Response' });
+    } catch (err) { res.status(500).json({ error: 'Failed to send response.' }); }
+});
+
+app.post('/api/admin/queries/:id/internal-note', adminAuth, async (req, res) => {
+    const { message } = req.body;
+    if (!message?.trim()) return res.status(400).json({ error: 'Note is required.' });
+    try {
+        const q = await dbGet('SELECT id FROM queries WHERE id = ?', [req.params.id]);
+        if (!q) return res.status(404).json({ error: 'Query not found.' });
+        await dbRun('INSERT INTO query_messages (query_id, sender_id, sender_role, message, is_internal) VALUES (?, ?, ?, ?, 1)', [q.id, req.userId, 'admin', message.trim()]);
+        await addQueryHistory(q.id, req.userId, 'admin', 'Internal Note', null, null, null);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'Failed to add note.' }); }
+});
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {

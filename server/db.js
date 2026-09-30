@@ -105,6 +105,47 @@ const SCHEMA = [
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(admin_id) REFERENCES users(id) ON DELETE CASCADE
 )`,
+`CREATE TABLE IF NOT EXISTS queries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    query_code TEXT UNIQUE NOT NULL,
+    user_id INTEGER NOT NULL,
+    subject TEXT NOT NULL,
+    category TEXT NOT NULL,
+    description TEXT NOT NULL,
+    priority TEXT NOT NULL DEFAULT 'Medium',
+    status TEXT NOT NULL DEFAULT 'Open',
+    assigned_to INTEGER,
+    attachment_name TEXT,
+    attachment_data TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    resolved_at DATETIME,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY(assigned_to) REFERENCES users(id) ON DELETE SET NULL
+)`,
+`CREATE TABLE IF NOT EXISTS query_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    query_id INTEGER NOT NULL,
+    sender_id INTEGER NOT NULL,
+    sender_role TEXT NOT NULL,
+    message TEXT NOT NULL,
+    is_internal INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(query_id) REFERENCES queries(id) ON DELETE CASCADE,
+    FOREIGN KEY(sender_id) REFERENCES users(id) ON DELETE CASCADE
+)`,
+`CREATE TABLE IF NOT EXISTS query_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    query_id INTEGER NOT NULL,
+    actor_id INTEGER,
+    actor_role TEXT,
+    action TEXT NOT NULL,
+    old_status TEXT,
+    new_status TEXT,
+    detail TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(query_id) REFERENCES queries(id) ON DELETE CASCADE
+)`,
 ];
 
 async function createRemoteDb(url, authToken) {

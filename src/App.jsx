@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Eye, EyeOff, LayoutDashboard, Building2, FileText, IndianRupee, AlertTriangle, LogOut, Menu, X, Plus, User, ChevronDown, ChevronRight, Receipt, CheckCircle2, ArrowLeft, ArrowRight, Trash2, Pencil, Mail, AtSign, Lock } from 'lucide-react'
+import { Eye, EyeOff, LayoutDashboard, Building2, FileText, IndianRupee, AlertTriangle, LogOut, Menu, X, Plus, User, ChevronDown, ChevronRight, Receipt, CheckCircle2, ArrowLeft, ArrowRight, Trash2, Pencil, Mail, AtSign, Lock, LifeBuoy, MessageSquare, Paperclip } from 'lucide-react'
 import Welcome from './Welcome.jsx'
 import ShinyButton from './ShinyButton.jsx'
 import InteractiveHoverButton from './InteractiveHoverButton.jsx'
@@ -57,6 +57,34 @@ const describeRule = (h) => h.payout_basis === 'fixed'
   : `${h.payout_percentage}% revenue share`
 
 const payoutBadge = (status) => status === 'Paid' ? 'green' : status === 'Partially Paid' ? 'blue' : status === 'Rejected' ? 'red' : 'amber'
+
+const EMPTY_QUERY = () => ({ subject: '', category: 'General Query', description: '', priority: 'Medium', attachment: null })
+const QUERY_CATEGORIES = ['Technical Issue', 'Software Functionality', 'Payment Discrepancy', 'Account Issue', 'Feature Request', 'General Query']
+const QUERY_PRIORITIES = ['Low', 'Medium', 'High']
+const queryStatusClass = (s) => ({ 'Open': 'blue', 'In Progress': 'amber', 'Awaiting User Response': 'purple', 'Resolved': 'green', 'Closed': 'gray' }[s] || 'blue')
+const priorityClass = (p) => ({ High: 'red', Medium: 'amber', Low: 'green' }[p] || 'amber')
+const QStatusBadge = ({ status }) => <span className={`badge ${queryStatusClass(status)}`}>{status}</span>
+const QPriorityBadge = ({ priority }) => <span className={`badge ${priorityClass(priority)}`}>{priority}</span>
+const parseTs = (s) => new Date(String(s).includes('T') ? s : String(s).replace(' ', 'T') + 'Z')
+const SYSTEM_EVENTS = ['Query Created', 'Admin Assigned', 'Status Changed', 'Query Resolved', 'Query Reopened', 'Query Closed']
+function buildTimeline(q) {
+  const items = []
+  for (const h of (q.history || [])) {
+    if (!SYSTEM_EVENTS.includes(h.action)) continue
+    items.push({ kind: 'system', title: h.action + (h.actor_name ? ` · ${h.actor_name}` : ''), text: h.detail || null, status: h.new_status || null, at: h.created_at })
+  }
+  for (const m of (q.messages || [])) {
+    const kind = m.is_internal ? 'internal' : m.sender_role === 'admin' ? 'admin' : 'user'
+    const title = m.is_internal ? 'Internal Note' : m.sender_role === 'admin' ? `${m.sender_name} · Support` : m.sender_name
+    items.push({ kind, title, text: m.message, at: m.created_at })
+  }
+  return items.sort((a, b) => parseTs(a.at) - parseTs(b.at))
+}
+const formatDateTime = (d) => {
+  if (!d) return '—'
+  const dt = new Date(d.includes('T') || d.includes(' ') ? d.replace(' ', 'T') + (d.includes('Z') ? '' : 'Z') : d)
+  return isNaN(dt) ? d : dt.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
 
 // Rejected payments are final (set by admin); every other status stays editable by the doctor.
 const PayoutStatus = ({ p, onChange }) => p.status === 'Rejected'
@@ -190,6 +218,21 @@ function App() {
   const [ledgerPeriod, setLedgerPeriod] = useState('week')
   const [expandedRow, setExpandedRow] = useState(null)
 
+  const [queries, setQueries] = useState([])
+  const [queryUnread, setQueryUnread] = useState(0)
+  const [queryForm, setQueryForm] = useState(EMPTY_QUERY)
+  const [queryError, setQueryError] = useState('')
+  const [querySaving, setQuerySaving] = useState(false)
+  const [queryDetail, setQueryDetail] = useState(null)
+  const [queryReply, setQueryReply] = useState('')
+
+  const loadQueries = useCallback(async () => {
+    try {
+      const [q, u] = await Promise.all([api('/queries/my'), api('/queries/unread')])
+      setQueries(q); setQueryUnread(u.count || 0)
+    } catch { /* non-fatal */ }
+  }, [])
+
   const load = useCallback(async () => {
     if (!session.loggedIn) return
     try {
@@ -197,6 +240,7 @@ function App() {
         api('/dashboard'), api('/hospitals'), api('/procedures'), api('/payouts'), api('/analytics')
       ])
       setDashboard(d); setHospitals(h); setProcedures(p); setPayouts(py); setAnalytics(an)
+      loadQueries()
     } catch (e) { console.error('Load failed:', e) }
   }, [session.loggedIn])
 
@@ -486,6 +530,55 @@ function App() {
     if (!confirm('Delete this entry?')) return
     await api(`/procedures/${id}`, { method: 'DELETE' })
     load()
+  }
+
+  // ── Support queries ──
+
+  const pickQueryAttachment = (file) => {
+    if (!file) return setQueryForm(f => ({ ...f, attachment: null }))
+    if (!/^image\/(png|jpe?g|webp)$/.test(file.type)) return setQueryError('Attachment must be a PNG, JPEG or WebP image.')
+    if (file.size > 2 * 1024 * 1024) return setQueryError('Attachment must be under 2 MB.')
+    const reader = new FileReader()
+    reader.onload = () => setQueryForm(f => ({ ...f, attachment: { name: file.name, dataUri: reader.result } }))
+    reader.readAsDataURL(file)
+    setQueryError('')
+  }
+
+  const submitQuery = async (e) => {
+    e.preventDefault()
+    const f = queryForm
+    if (!f.subject.trim()) return setQueryError('Subject is required.')
+    if (!f.description.trim()) return setQueryError('Description is required.')
+    setQuerySaving(true)
+    try {
+      const q = await api('/queries', { method: 'POST', body: JSON.stringify(f) })
+      setShowModal(null)
+      setQueryForm(EMPTY_QUERY())
+      setQueryError('')
+      setToast(`Query submitted — ${q.query_code}`)
+      loadQueries()
+    } catch (err) { setQueryError(err.message) }
+    setQuerySaving(false)
+  }
+
+  const openQueryDetail = async (id) => {
+    setQueryDetail({ loading: true })
+    setQueryReply('')
+    setShowModal('query-detail')
+    try { setQueryDetail(await api(`/queries/${id}`)) }
+    catch (err) { setQueryDetail({ error: err.message }) }
+  }
+
+  const sendQueryReply = async () => {
+    if (!queryReply.trim() || !queryDetail?.id) return
+    try {
+      await api(`/queries/${queryDetail.id}/messages`, { method: 'POST', body: JSON.stringify({ message: queryReply }) })
+      setQueryReply('')
+      setToast('Reply sent')
+      const fresh = await api(`/queries/${queryDetail.id}`)
+      setQueryDetail(fresh)
+      loadQueries()
+    } catch (err) { setToast(err.message) }
   }
 
   const greeting = (() => {
@@ -865,8 +958,8 @@ function App() {
 
   const renderSettings = () => (
     <div className="animate-in">
-      <div className="page-header"><div><h1>Settings</h1><p className="page-subtitle">Account preferences</p></div></div>
-      <div className="card" style={{ maxWidth: 480 }}><div className="card-body">
+      <div className="page-header"><div><h1>Settings</h1><p className="page-subtitle">Account preferences & support</p></div></div>
+      <div className="card mb-6" style={{ maxWidth: 480 }}><div className="card-body">
         <div className="flex items-center gap-4 mb-6" style={{ paddingBottom: 24, borderBottom: '1px solid var(--border-light)' }}>
           <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--gradient-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: '1.25rem' }}>
             {session.user?.name?.charAt(0) || 'D'}
@@ -875,6 +968,38 @@ function App() {
         </div>
         <button className="btn btn-danger" onClick={handleLogout}><LogOut size={16} /> Logout</button>
       </div></div>
+
+      <div className="card">
+        <div className="card-header">
+          <div><h3><LifeBuoy size={16} /> Help & Support</h3></div>
+          <button className="btn btn-primary btn-sm" onClick={() => { setQueryForm(EMPTY_QUERY()); setQueryError(''); setShowModal('query') }}><Plus size={14} /> Raise a Query</button>
+        </div>
+        <div className="card-body compact">
+          <h4 className="support-subhead">My Queries</h4>
+          {queries.length === 0 ? (
+            <div className="empty-state" style={{ padding: '32px 16px' }}>
+              <MessageSquare size={40} className="empty-state-icon" />
+              <p>You haven't raised any queries yet.</p>
+            </div>
+          ) : (
+            <div className="table-wrap"><table className="data-table"><thead><tr>
+              <th>Query ID</th><th>Subject</th><th>Category</th><th>Priority</th><th>Submitted</th><th>Status</th><th></th>
+            </tr></thead><tbody>
+              {queries.map(q => (
+                <tr key={q.id}>
+                  <td className="font-semibold nowrap">{q.query_code}</td>
+                  <td>{q.subject}</td>
+                  <td className="nowrap">{q.category}</td>
+                  <td><QPriorityBadge priority={q.priority} /></td>
+                  <td className="nowrap">{formatDate(q.created_at)}</td>
+                  <td><QStatusBadge status={q.status} /></td>
+                  <td><button className="btn-ghost btn-sm" onClick={() => openQueryDetail(q.id)} title="View details"><ChevronRight size={14} /></button></td>
+                </tr>
+              ))}
+            </tbody></table></div>
+          )}
+        </div>
+      </div>
     </div>
   )
 
@@ -882,7 +1007,7 @@ function App() {
   // MODALS
   // ═══════════════════════════════════════
 
-  const closeModal = () => { setShowModal(null); setServiceModal(null); setEditingEntry(null); setEditingPayout(null); setEditingHospital(null) }
+  const closeModal = () => { setShowModal(null); setServiceModal(null); setEditingEntry(null); setEditingPayout(null); setEditingHospital(null); setQueryDetail(null) }
 
   const renderModals = () => {
     if (statusChange) {
@@ -1143,6 +1268,85 @@ function App() {
       )
     }
 
+    if (showModal === 'query') {
+      return (
+        <div className="modal-backdrop" onClick={closeModal}>
+          <div className="modal modal-compact animate-slide-up" role="dialog" aria-labelledby="q-title" onClick={e => e.stopPropagation()}>
+            <div className="modal-header"><h2 id="q-title">Raise a Query</h2><button className="btn-ghost" aria-label="Close" onClick={closeModal}><X size={20} /></button></div>
+            <form onSubmit={submitQuery}>
+              <div className="modal-body">
+                <div className="form-grid">
+                  <div className="form-field full"><label className="form-label" htmlFor="q-subj">Subject *</label><input id="q-subj" className="form-input" autoFocus value={queryForm.subject} onChange={e => setQueryForm({ ...queryForm, subject: e.target.value })} placeholder="Brief summary of the issue" /></div>
+                  <div className="form-field"><label className="form-label" htmlFor="q-cat">Category *</label>
+                    <select id="q-cat" className="form-select" value={queryForm.category} onChange={e => setQueryForm({ ...queryForm, category: e.target.value })}>
+                      {QUERY_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-field"><label className="form-label" htmlFor="q-pri">Priority *</label>
+                    <select id="q-pri" className="form-select" value={queryForm.priority} onChange={e => setQueryForm({ ...queryForm, priority: e.target.value })}>
+                      {QUERY_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-field full"><label className="form-label" htmlFor="q-desc">Description *</label><textarea id="q-desc" className="form-input" rows={5} value={queryForm.description} onChange={e => setQueryForm({ ...queryForm, description: e.target.value })} placeholder="Describe the issue in detail" /></div>
+                  <div className="form-field full">
+                    <label className="form-label" htmlFor="q-file">Attachment (optional)</label>
+                    <input id="q-file" className="form-input" type="file" accept="image/png,image/jpeg,image/webp" onChange={e => pickQueryAttachment(e.target.files?.[0])} />
+                    {queryForm.attachment && <span className="form-hint"><Paperclip size={12} /> {queryForm.attachment.name} attached</span>}
+                    <span className="form-hint">PNG, JPEG or WebP · up to 2 MB</span>
+                  </div>
+                </div>
+                {queryError && <div className="form-error" role="alert">{queryError}</div>}
+              </div>
+              <div className="modal-footer"><button type="button" className="btn btn-outline" onClick={closeModal}>Cancel</button><button type="submit" className="btn btn-primary" disabled={querySaving}>{querySaving ? 'Submitting…' : 'Submit Query'}</button></div>
+            </form>
+          </div>
+        </div>
+      )
+    }
+
+    if (showModal === 'query-detail') {
+      const q = queryDetail
+      return (
+        <div className="modal-backdrop" onClick={closeModal}>
+          <div className="modal modal-wide animate-slide-up" role="dialog" aria-label="Query details" onClick={e => e.stopPropagation()}>
+            <div className="modal-header"><h2>{q?.query_code || 'Query'}</h2><button className="btn-ghost" aria-label="Close" onClick={closeModal}><X size={20} /></button></div>
+            <div className="modal-body">
+              {!q || q.loading ? <div className="empty-state"><p>Loading…</p></div> : q.error ? <div className="form-error">{q.error}</div> : (<>
+                <div className="q-detail-head">
+                  <div><h3 className="q-subject">{q.subject}</h3><div className="q-meta">{q.category} · <QPriorityBadge priority={q.priority} /> · {formatDateTime(q.created_at)}</div></div>
+                  <QStatusBadge status={q.status} />
+                </div>
+                <p className="q-description">{q.description}</p>
+                {q.attachment_data && <a className="q-attachment" href={q.attachment_data} target="_blank" rel="noreferrer"><Paperclip size={14} /> {q.attachment_name || 'Attachment'}</a>}
+                {q.assigned_to_name && <div className="text-sm text-muted" style={{ marginTop: 8 }}>Assigned to {q.assigned_to_name}</div>}
+
+                <h4 className="support-subhead" style={{ marginTop: 20 }}>Conversation & History</h4>
+                <div className="q-timeline">
+                  {buildTimeline(q).map((t, i) => (
+                    <div key={i} className={`q-tl-item ${t.kind}`}>
+                      <div className="q-tl-dot" />
+                      <div className="q-tl-body">
+                        <div className="q-tl-head"><strong>{t.title}</strong><span>{formatDateTime(t.at)}</span></div>
+                        {t.text && <div className="q-tl-text">{t.text}</div>}
+                        {t.status && <div className="q-tl-status"><QStatusBadge status={t.status} /></div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {q.status !== 'Closed' && (
+                  <div className="q-reply">
+                    <textarea className="form-input" rows={2} value={queryReply} onChange={e => setQueryReply(e.target.value)} placeholder="Write a reply…" />
+                    <button className="btn btn-primary" disabled={!queryReply.trim()} onClick={sendQueryReply}>Send</button>
+                  </div>
+                )}
+              </>)}
+            </div>
+          </div>
+        </div>
+      )
+    }
+
     return null
   }
 
@@ -1259,6 +1463,7 @@ function App() {
           <div className="nav-spacer" />
 
           <button className={`nav-item ${page === 'Settings' ? 'active' : ''}`} onClick={() => { setPage('Settings'); setSidebarOpen(false) }}>
+            {queryUnread > 0 && <span className="nav-badge">{queryUnread}</span>}
             <span className="nav-icon"><User size={18} /></span>Settings
           </button>
           <button className="nav-item logout-item" onClick={handleLogout}>
