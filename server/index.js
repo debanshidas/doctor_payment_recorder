@@ -308,7 +308,8 @@ app.put('/api/procedures/:id', auth, async (req, res) => {
         }
         if (sets.length === 0) return res.status(400).json({ error: 'Nothing to update.' });
         params.push(req.params.id, req.userId);
-        await dbRun(`UPDATE procedures SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`, params);
+        const r = await dbRun(`UPDATE procedures SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`, params);
+        if (r.changes === 0) return res.status(404).json({ error: 'Procedure not found.' });
         const proc = await dbGet(
             `SELECT p.*, h.name as hospital_name FROM procedures p JOIN hospitals h ON p.hospital_id = h.id WHERE p.id = ?`,
             [req.params.id]
@@ -375,6 +376,9 @@ app.post('/api/payouts', auth, async (req, res) => {
 
 app.put('/api/payouts/:id', auth, async (req, res) => {
     const fields = ['status', 'actual_net', 'transaction_ref', 'notes', 'date', 'period'];
+    if (req.body.status !== undefined && !PAYOUT_STATUSES.includes(req.body.status)) {
+        return res.status(400).json({ error: `Status must be one of: ${PAYOUT_STATUSES.join(', ')}.` });
+    }
     const sets = [];
     const params = [];
     for (const f of fields) {
@@ -386,7 +390,8 @@ app.put('/api/payouts/:id', auth, async (req, res) => {
     if (sets.length === 0) return res.status(400).json({ error: 'Nothing to update.' });
     params.push(req.params.id, req.userId);
     try {
-        await dbRun(`UPDATE payouts SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`, params);
+        const r = await dbRun(`UPDATE payouts SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`, params);
+        if (r.changes === 0) return res.status(404).json({ error: 'Payout not found.' });
         const payout = await dbGet(
             `SELECT py.*, h.name as hospital_name FROM payouts py JOIN hospitals h ON py.hospital_id = h.id WHERE py.id = ?`,
             [req.params.id]

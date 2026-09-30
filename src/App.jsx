@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Eye, EyeOff, LayoutDashboard, Building2, FileText, IndianRupee, AlertTriangle, LogOut, Menu, X, Plus, User, ChevronDown, ChevronRight, Activity, Receipt, CheckCircle2, ArrowLeft, ArrowRight, Trash2, Pencil, Clock, TrendingUp, Hourglass } from 'lucide-react'
+import { Eye, EyeOff, LayoutDashboard, Building2, FileText, IndianRupee, AlertTriangle, LogOut, Menu, X, Plus, User, ChevronDown, ChevronRight, Activity, Receipt, CheckCircle2, ArrowLeft, ArrowRight, Trash2, Pencil } from 'lucide-react'
 import Welcome from './Welcome.jsx'
 import './App.css'
 
@@ -38,6 +38,15 @@ const describeRule = (h) => h.payout_basis === 'fixed'
 
 const payoutBadge = (status) => status === 'Paid' ? 'green' : status === 'Partially Paid' ? 'blue' : status === 'Rejected' ? 'red' : 'amber'
 
+// Rejected payments are final (set by admin); every other status stays editable by the doctor.
+const PayoutStatus = ({ p, onChange }) => p.status === 'Rejected'
+  ? <><span className="badge red">Rejected</span>{p.notes && <div className="text-xs text-muted" style={{ marginTop: 4 }}>{p.notes}</div>}</>
+  : (
+    <select className={`status-select ${payoutBadge(p.status)}`} aria-label="Payment status" value={p.status} onChange={e => onChange(p.id, e.target.value)}>
+      {PAYOUT_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  )
+
 // Mirrors the server's calcWaterfall so the entry form can preview the net figure.
 const previewNet = (h, amount, cases) => {
   if (!h) return null
@@ -48,54 +57,14 @@ const previewNet = (h, amount, cases) => {
   return { gross, share, net }
 }
 
-const MoneyTiles = ({ m, subs = {} }) => {
-  const share = (v) => m.earned > 0 ? Math.min(100, (v / m.earned) * 100) : 0
-  const cards = [
-    { key: 'earned', label: 'Earned', color: 'blue', icon: TrendingUp, sub: subs.earned || 'Net expected from your entries, after TDS and deductions.', pct: m.earned > 0 ? 100 : 0, note: 'of earned' },
-    { key: 'received', label: 'Received', color: 'green', icon: CheckCircle2, sub: subs.received || 'Payments verified and credited to you.', pct: share(m.received), note: 'collected' },
-    { key: 'underReview', label: 'Under Review', color: 'amber', icon: Clock, sub: subs.underReview || 'Payments you recorded that are awaiting verification.', pct: share(m.underReview), note: 'in review' },
-    { key: 'pending', label: 'Pending', color: 'red', icon: Hourglass, sub: subs.pending || 'Earned but not yet paid by hospitals.', pct: share(m.pending), note: 'outstanding' },
-  ]
-  return (
-    <div className="dash-cards">
-      {cards.map(c => (
-        <article key={c.key} className="dash-card">
-          <div className={`dash-art ${c.color}`}>
-            <span className="dash-art-icon"><c.icon size={18} /></span>
-            <span className="dash-art-amount">{formatMoney(m[c.key])}</span>
-            <div className="dash-art-bar"><div style={{ width: `${c.pct}%` }} /></div>
-            <span className="dash-art-note">{formatPct(c.pct)} {c.note}</span>
-          </div>
-          <h3>{c.label}</h3>
-          <p>{c.sub}</p>
-        </article>
-      ))}
-    </div>
-  )
-}
-
-const MoneyBar = ({ m, rate }) => {
-  const total = m.earned || 0
-  const pct = (v) => total > 0 ? Math.min(100, (v / total) * 100) : 0
-  return (
-    <div className="collection-bar-wrap">
-      <div className="collection-bar-header">
-        <div><h3>Collection</h3><span className="text-xs text-muted">{formatMoney(m.received)} of {formatMoney(total)} earned</span></div>
-        <span className="collection-rate-value">{formatPct(rate)}</span>
-      </div>
-      <div className="money-bar" role="img" aria-label={`Received ${formatPct(pct(m.received))}, under review ${formatPct(pct(m.underReview))}, pending ${formatPct(pct(m.pending))}`}>
-        <div className="money-seg received" style={{ width: `${pct(m.received)}%` }} />
-        <div className="money-seg review" style={{ width: `${pct(m.underReview)}%` }} />
-        <div className="money-seg pending" style={{ width: `${pct(m.pending)}%` }} />
-      </div>
-      <div className="money-legend">
-        <span><i className="received" />Received {formatMoney(m.received)}</span>
-        <span><i className="review" />Under review {formatMoney(m.underReview)}</span>
-        <span><i className="pending" />Pending {formatMoney(m.pending)}</span>
-      </div>
-    </div>
-  )
-}
+const MoneyTiles = ({ m, subs = {} }) => (
+  <div className="stat-strip">
+    <div><span className="stat-label">Earned</span><span className="stat-value">{formatMoney(m.earned)}</span><span className="stat-sub">{subs.earned || 'Net expected from entries'}</span></div>
+    <div><span className="stat-label">Received</span><span className="stat-value green">{formatMoney(m.received)}</span><span className="stat-sub">{subs.received || 'Fully or partially paid'}</span></div>
+    <div><span className="stat-label">Under Review</span><span className="stat-value amber">{formatMoney(m.underReview)}</span><span className="stat-sub">{subs.underReview || 'Awaiting verification'}</span></div>
+    <div><span className="stat-label">Pending</span><span className="stat-value">{formatMoney(m.pending)}</span><span className="stat-sub">{subs.pending || 'Not yet paid'}</span></div>
+  </div>
+)
 
 async function api(path, opts = {}) {
   const session = JSON.parse(localStorage.getItem('doctrack_session') || '{}')
@@ -363,6 +332,14 @@ function App() {
     } catch (err) { setPayoutError(err.message) }
   }
 
+  const changePayoutStatus = async (id, status) => {
+    try {
+      await api(`/payouts/${id}`, { method: 'PUT', body: JSON.stringify({ status }) })
+      setToast(`Marked ${status.toLowerCase()}`)
+      load()
+    } catch (err) { setToast(err.message) }
+  }
+
   const deleteProcedure = async (id) => {
     if (!confirm('Delete this entry?')) return
     await api(`/procedures/${id}`, { method: 'DELETE' })
@@ -402,20 +379,20 @@ function App() {
     const reviewCount = payouts.filter(p => p.status === 'Under Review').length
     return (
       <div className="animate-in">
-        <div className="dash-intro">
-          <h1>{greeting}, {session.user?.name?.split(' ')[0]}</h1>
-          <p>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })} · {d.procedureCount} {d.procedureCount === 1 ? 'entry' : 'entries'} across {d.hospitalCount} hospital{d.hospitalCount === 1 ? '' : 's'}</p>
+        <div className="page-header">
+          <div>
+            <h1>{greeting}, {session.user?.name?.split(' ')[0]}</h1>
+            <p className="page-subtitle">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })} · {d.procedureCount} {d.procedureCount === 1 ? 'entry' : 'entries'} across {d.hospitalCount} hospital{d.hospitalCount === 1 ? '' : 's'}</p>
+          </div>
           <button className="btn btn-primary" onClick={openEntry}><Plus size={16} /> Add Entry</button>
         </div>
 
         <MoneyTiles m={d} subs={{
-          earned: `Net expected from ${d.procedureCount} ${d.procedureCount === 1 ? 'entry' : 'entries'}, after TDS and deductions.`,
-          received: `${paidCount} verified payment${paidCount === 1 ? '' : 's'} credited to you.`,
-          underReview: reviewCount ? `${reviewCount} payment${reviewCount === 1 ? '' : 's'} recorded and awaiting verification.` : 'No payments awaiting verification right now.',
-          pending: d.pending > 0 ? 'Earned but not yet paid by hospitals.' : 'Everything earned has been settled.',
+          earned: `${d.procedureCount} ${d.procedureCount === 1 ? 'entry' : 'entries'}`,
+          received: `${paidCount} payment${paidCount === 1 ? '' : 's'}`,
+          underReview: `${reviewCount} payment${reviewCount === 1 ? '' : 's'}`,
+          pending: `${formatPct(d.collectionRate)} collected`,
         }} />
-
-        <MoneyBar m={d} rate={d.collectionRate} />
 
         {d.alerts.length > 0 && (
           <div className="card mb-6"><div className="card-header"><h3>Alerts</h3></div><div className="card-body">
@@ -440,28 +417,14 @@ function App() {
 
           <div className="card">
             <div className="card-header"><h3>By Hospital</h3><button className="card-link" onClick={() => setPage('Reconciliation')}>Details <ArrowRight size={14} /></button></div>
-            <div className="card-body">
-              <div className="hospital-list">
-                {(d.hospitalSummary || []).map(h => {
-                  const pct = h.earned > 0 ? Math.min(100, (h.received / h.earned) * 100) : 0
-                  return (
-                    <button key={h.id} type="button" className="hospital-row" onClick={() => { setLedgerHospital(String(h.id)); setPage('Ledger') }}>
-                      <div className="hospital-row-top">
-                        <span className="hospital-row-name">{h.name}</span>
-                        <span className="hospital-row-pct">{formatPct(pct)} collected</span>
-                      </div>
-                      <div className="hospital-progress"><div style={{ width: `${pct}%` }} /></div>
-                      <div className="hospital-row-stats">
-                        <span>Earned <b>{formatMoney(h.earned)}</b></span>
-                        <span>Received <b className="text-green">{formatMoney(h.received)}</b></span>
-                        <span>Pending <b className="text-amber">{formatMoney(h.pending)}</b></span>
-                      </div>
-                    </button>
-                  )
-                })}
-                {(d.hospitalSummary || []).length === 0 && <p className="text-muted text-sm text-center" style={{ margin: 0 }}>No hospitals yet</p>}
-              </div>
-            </div>
+            <div className="card-body compact"><div className="table-wrap"><table className="data-table"><thead><tr><th>Hospital</th><th>Earned</th><th>Received</th><th>Pending</th></tr></thead><tbody>
+              {(d.hospitalSummary || []).map(h => (
+                <tr key={h.id} style={{ cursor: 'pointer' }} onClick={() => { setLedgerHospital(String(h.id)); setPage('Ledger') }}>
+                  <td className="font-semibold">{h.name}</td><td className="amount">{formatMoney(h.earned)}</td><td className="amount text-green">{formatMoney(h.received)}</td><td className="amount">{formatMoney(h.pending)}</td>
+                </tr>
+              ))}
+              {(d.hospitalSummary || []).length === 0 && <tr><td colSpan={4} className="text-center text-muted" style={{ padding: '24px' }}>No hospitals yet</td></tr>}
+            </tbody></table></div></div>
           </div>
         </div>
       </div>
@@ -613,7 +576,7 @@ function App() {
             <tr key={py.id}>
               <td className="nowrap">{formatDate(py.date)}</td><td className="font-semibold">{py.hospital_name}</td><td>{py.transaction_ref || '—'}</td>
               <td className="amount">{formatMoney(py.actual_net)}</td>
-              <td><span className={`badge ${payoutBadge(py.status)}`}>{py.status}</span>{py.status === 'Rejected' && py.notes && <div className="text-xs text-muted" style={{ marginTop: 4 }}>{py.notes}</div>}</td>
+              <td><PayoutStatus p={py} onChange={changePayoutStatus} /></td>
             </tr>
           ))}
         </tbody></table></div></div></div>
@@ -634,7 +597,6 @@ function App() {
         <div className="page-header"><div><h1>Reconciliation</h1><p className="page-subtitle">Earned vs received, hospital by hospital</p></div></div>
 
         <MoneyTiles m={r.summary} />
-        <MoneyBar m={r.summary} rate={r.summary.earned > 0 ? (r.summary.received / r.summary.earned) * 100 : 0} />
 
         <div className="card mb-6"><div className="card-header"><h3>By Hospital</h3></div><div className="card-body compact"><div className="table-wrap"><table className="data-table"><thead><tr>
           <th>Hospital</th><th>Entries</th><th>Earned</th><th>Received</th><th>Under Review</th><th>Pending</th>
@@ -652,13 +614,15 @@ function App() {
           <div className="stat-tile amber"><span className="stat-label">Total Deductions</span><span className="stat-value">{formatMoney(r.totalDeductions)}</span></div>
         </div>
 
-        {review.length > 0 && (
-          <div className="card"><div className="card-header"><h3><Clock size={16} /> Awaiting Verification</h3></div><div className="card-body compact"><div className="table-wrap"><table className="data-table"><thead><tr>
-            <th>Date</th><th>Hospital</th><th>Reference</th><th>Amount</th>
+        <div className="card">
+          <div className="card-header"><h3>Payments{review.length > 0 ? ` · ${review.length} under review` : ''}</h3><button className="card-link" onClick={() => setPage('Payouts')}>Record payment <ArrowRight size={14} /></button></div>
+          <div className="card-body compact"><div className="table-wrap"><table className="data-table"><thead><tr>
+            <th>Date</th><th>Hospital</th><th>Reference</th><th>Amount</th><th>Status</th>
           </tr></thead><tbody>
-            {review.map(p => <tr key={p.id}><td className="nowrap">{formatDate(p.date)}</td><td>{p.hospital_name}</td><td>{p.transaction_ref || '—'}</td><td className="amount">{formatMoney(p.actual_net)}</td></tr>)}
-          </tbody></table></div></div></div>
-        )}
+            {r.payouts.map(p => <tr key={p.id}><td className="nowrap">{formatDate(p.date)}</td><td>{p.hospital_name}</td><td>{p.transaction_ref || '—'}</td><td className="amount">{formatMoney(p.actual_net)}</td><td><PayoutStatus p={p} onChange={changePayoutStatus} /></td></tr>)}
+            {r.payouts.length === 0 && <tr><td colSpan={5} className="text-center text-muted" style={{ padding: '24px' }}>No payments recorded yet</td></tr>}
+          </tbody></table></div></div>
+        </div>
       </div>
     )
   }
