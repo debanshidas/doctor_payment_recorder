@@ -91,7 +91,7 @@ const formatDateTime = (d) => {
 const PayoutStatus = ({ p, onChange }) => !EDITABLE_PAYOUT.includes(p.status)
   ? <><span className={`badge ${payoutBadge(p.status)}`}>{p.status}</span>{p.status === 'Rejected' && p.notes && <div className="text-xs text-muted" style={{ marginTop: 4 }}>{p.notes}</div>}</>
   : (
-    <select className={`status-select ${payoutBadge(p.status)}`} aria-label="Payment status" value={p.status} onChange={e => { const next = e.target.value; e.target.value = p.status; onChange(p, next) }}>
+    <select className={`status-select ${payoutBadge(p.status)}`} aria-label="Payment status" value={p.status} onChange={e => onChange(p, e.target.value)}>
       {PAYOUT_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
   )

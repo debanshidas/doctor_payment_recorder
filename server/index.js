@@ -418,14 +418,19 @@ app.put('/api/payouts/:id', auth, async (req, res) => {
             }
         }
 
-        const total = req.body.expected_net !== undefined ? Math.max(0, Number(req.body.expected_net) || 0) : existing.expected_net;
+        let total = req.body.expected_net !== undefined ? Math.max(0, Number(req.body.expected_net) || 0) : existing.expected_net;
         const received = req.body.actual_net !== undefined ? Number(req.body.actual_net) || 0 : existing.actual_net;
-        // Effective status is derived from the amounts so a record can never be Paid with money outstanding.
         let effStatus = req.body.status !== undefined ? req.body.status : existing.status;
-        if (total > 0 && effStatus !== 'Under Review' && effStatus !== 'Rejected') {
+        let clearTotal = false;
+        if (req.body.status === 'Paid') {
+            // Explicit "Fully Paid" always wins — clear any partial total so it is fully settled (no Paid-with-shortfall).
+            total = 0;
+            clearTotal = true;
+        } else if (total > 0 && effStatus !== 'Under Review' && effStatus !== 'Rejected') {
+            // Derive from amounts so a record can never be Paid with money outstanding.
             effStatus = received >= total ? 'Paid' : 'Partially Paid';
         }
-        if (req.body.expected_net !== undefined) { sets.push('expected_net = ?'); params.push(total); }
+        if (req.body.expected_net !== undefined || clearTotal) { sets.push('expected_net = ?'); params.push(total); }
         sets.push('status = ?'); params.push(effStatus);
         sets.push('shortfall = ?'); params.push(total > 0 ? Math.max(0, total - received) : 0);
 
