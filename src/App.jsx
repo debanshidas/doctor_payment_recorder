@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Eye, EyeOff, LayoutDashboard, Building2, FileText, IndianRupee, AlertTriangle, LogOut, Menu, X, Plus, User, ChevronDown, ChevronRight, Activity, Receipt, CheckCircle2, ArrowLeft, ArrowRight, Trash2, Pencil } from 'lucide-react'
+import { Eye, EyeOff, LayoutDashboard, Building2, FileText, IndianRupee, AlertTriangle, LogOut, Menu, X, Plus, User, ChevronDown, ChevronRight, Receipt, CheckCircle2, ArrowLeft, ArrowRight, Trash2, Pencil } from 'lucide-react'
 import Welcome from './Welcome.jsx'
 import './App.css'
 
@@ -112,7 +112,6 @@ function App() {
   const [hospitals, setHospitals] = useState([])
   const [procedures, setProcedures] = useState([])
   const [payouts, setPayouts] = useState([])
-  const [reconciliation, setReconciliation] = useState(null)
 
   const [showModal, setShowModal] = useState(null)
   const [toast, setToast] = useState('')
@@ -139,10 +138,10 @@ function App() {
   const load = useCallback(async () => {
     if (!session.loggedIn) return
     try {
-      const [d, h, p, py, r] = await Promise.all([
-        api('/dashboard'), api('/hospitals'), api('/procedures'), api('/payouts'), api('/reconciliation')
+      const [d, h, p, py] = await Promise.all([
+        api('/dashboard'), api('/hospitals'), api('/procedures'), api('/payouts')
       ])
-      setDashboard(d); setHospitals(h); setProcedures(p); setPayouts(py); setReconciliation(r)
+      setDashboard(d); setHospitals(h); setProcedures(p); setPayouts(py)
     } catch (e) { console.error('Load failed:', e) }
   }, [session.loggedIn])
 
@@ -478,7 +477,7 @@ function App() {
           </div>
 
           <div className="card">
-            <div className="card-header"><h3>By Hospital</h3><button className="card-link" onClick={() => setPage('Reconciliation')}>Details <ArrowRight size={14} /></button></div>
+            <div className="card-header"><h3>By Hospital</h3><button className="card-link" onClick={() => setPage('Hospitals')}>Details <ArrowRight size={14} /></button></div>
             <div className="card-body compact"><div className="table-wrap"><table className="data-table"><thead><tr><th>Hospital</th><th>Earned</th><th>Received</th><th>Pending</th></tr></thead><tbody>
               {(d.hospitalSummary || []).map(h => (
                 <tr key={h.id} style={{ cursor: 'pointer' }} onClick={() => { setLedgerHospital(String(h.id)); setPage('Ledger') }}>
@@ -638,49 +637,6 @@ function App() {
       )}
     </div>
   )
-
-  // ═══════════════════════════════════════
-  // RENDER: Reconciliation
-  // ═══════════════════════════════════════
-
-  const renderReconciliation = () => {
-    const r = reconciliation
-    if (!r) return <div className="empty-state"><p>Loading...</p></div>
-    const review = r.payouts.filter(p => p.status === 'Under Review')
-    return (
-      <div className="animate-in">
-        <div className="page-header"><div><h1>Reconciliation</h1><p className="page-subtitle">Earned vs received, hospital by hospital</p></div></div>
-
-        <MoneyTiles m={r.summary} />
-
-        <div className="card mb-6"><div className="card-header"><h3>By Hospital</h3></div><div className="card-body compact"><div className="table-wrap"><table className="data-table"><thead><tr>
-          <th>Hospital</th><th>Entries</th><th>Earned</th><th>Received</th><th>Under Review</th><th>Pending</th>
-        </tr></thead><tbody>
-          {r.hospitals.map(h => (
-            <tr key={h.id}><td className="font-semibold">{h.name}</td><td>{h.procedure_count}</td>
-              <td className="amount">{formatMoney(h.earned)}</td><td className="amount text-green">{formatMoney(h.received)}</td>
-              <td className="amount text-amber">{formatMoney(h.under_review)}</td><td className="amount">{formatMoney(h.pending)}</td></tr>
-          ))}
-          {r.hospitals.length === 0 && <tr><td colSpan={6} className="text-center text-muted" style={{ padding: '32px' }}>No hospitals yet</td></tr>}
-        </tbody></table></div></div></div>
-
-        <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
-          <div className="stat-tile red"><span className="stat-label">Total TDS</span><span className="stat-value">{formatMoney(r.totalTds)}</span></div>
-          <div className="stat-tile amber"><span className="stat-label">Total Deductions</span><span className="stat-value">{formatMoney(r.totalDeductions)}</span></div>
-        </div>
-
-        <div className="card">
-          <div className="card-header"><h3>Payments{review.length > 0 ? ` · ${review.length} under review` : ''}</h3><div className="flex items-center gap-4"><StatusLegend /><button className="card-link" onClick={() => setPage('Payouts')}>Record payment <ArrowRight size={14} /></button></div></div>
-          <div className="card-body compact"><div className="table-wrap"><table className="data-table"><thead><tr>
-            <th>Date</th><th>Hospital</th><th>Reference</th><th>Amount</th><th>Status</th>
-          </tr></thead><tbody>
-            {r.payouts.map(p => <tr key={p.id} className={`status-row ${payoutBadge(p.status)}`}><td className="nowrap">{formatDate(p.date)}</td><td>{p.hospital_name}</td><td>{p.transaction_ref || '—'}</td><td className="amount">{formatMoney(p.actual_net)}</td><td><PayoutStatus p={p} onChange={requestStatusChange} /></td></tr>)}
-            {r.payouts.length === 0 && <tr><td colSpan={5} className="text-center text-muted" style={{ padding: '24px' }}>No payments recorded yet</td></tr>}
-          </tbody></table></div></div>
-        </div>
-      </div>
-    )
-  }
 
   // ═══════════════════════════════════════
   // RENDER: Settings
@@ -956,7 +912,6 @@ function App() {
       case 'Ledger': return renderLedger()
       case 'Hospitals': return renderHospitals()
       case 'Payouts': return renderPayouts()
-      case 'Reconciliation': return renderReconciliation()
       case 'Settings': return renderSettings()
       default: return renderDashboard()
     }
@@ -1041,7 +996,6 @@ function App() {
     { key: 'Ledger', icon: FileText, label: 'Ledger' },
     { key: 'Hospitals', icon: Building2, label: 'Hospitals' },
     { key: 'Payouts', icon: IndianRupee, label: 'Payments' },
-    { key: 'Reconciliation', icon: Activity, label: 'Reconciliation' },
   ]
 
   return (<>
