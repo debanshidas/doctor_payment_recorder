@@ -222,12 +222,12 @@ function HospitalsPage() {
       <div className="page-header"><h1>All Hospitals</h1><p>Hospitals registered across all doctors</p></div>
       <div className="card">
         <table className="data-table">
-          <thead><tr><th>Hospital</th><th>Doctor</th><th>Location</th><th>Payout %</th><th>TDS Rate</th><th>Settlement</th></tr></thead>
+          <thead><tr><th>Hospital</th><th>Doctor</th><th>Location</th><th>Payment Rule</th><th>TDS Rate</th><th>Settlement</th></tr></thead>
           <tbody>
             {hospitals.map(h => (
               <tr key={h.id}>
                 <td>{h.name}</td><td>{h.doctor_name}</td><td>{h.location}</td>
-                <td>{h.payout_percentage}%</td><td>{h.tds_rate}%</td><td>{h.settlement_cycle}</td>
+                <td>{h.payout_basis === 'fixed' ? `${formatCurrency(h.fixed_fee)} / case` : `${h.payout_percentage}% share`}</td><td>{h.tds_rate}%</td><td>{h.settlement_cycle}</td>
               </tr>
             ))}
             {hospitals.length === 0 && <tr><td colSpan={6} className="empty-state">No hospitals registered</td></tr>}

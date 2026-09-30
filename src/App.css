@@ -1038,9 +1038,59 @@ button { cursor: pointer; border: none; background: none; }
   color: rgba(226,232,240,0.7);
 }
 
+.login-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 20px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--sidebar-text);
+}
+.login-back:hover { color: #f8fafc; }
+
 .login-switch {
   margin-top: 8px;
   text-align: center;
+}
+
+/* ── Payout basis toggle ── */
+
+.basis-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.basis-toggle button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: left;
+  transition: all 0.15s;
+}
+.basis-toggle button small {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+.basis-toggle button.active {
+  border-color: var(--blue);
+  background: var(--blue-bg);
+  color: var(--text);
+}
+.form-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.75rem;
+  color: var(--muted);
 }
 
 .login-switch button {

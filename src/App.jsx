@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Eye, EyeOff, LayoutDashboard, Building2, FileText, IndianRupee, AlertTriangle, LogOut, Menu, X, Plus, User, Upload, ChevronDown, ChevronRight, Activity, TrendingUp, Receipt, CheckCircle2, XCircle, Clock, ArrowRight, Trash2, Edit3, Search } from 'lucide-react'
+import { Eye, EyeOff, LayoutDashboard, Building2, FileText, IndianRupee, AlertTriangle, LogOut, Menu, X, Plus, User, Upload, ChevronDown, ChevronRight, Activity, TrendingUp, Receipt, CheckCircle2, XCircle, Clock, ArrowRight, ArrowLeft, Trash2, Edit3, Search } from 'lucide-react'
+import Welcome from './Welcome.jsx'
 import './App.css'
 
 const API = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '') + '/api'
@@ -8,6 +9,12 @@ const formatMoney = (v) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Number(v || 0))
 
 const formatPct = (v) => `${Number(v || 0).toFixed(1)}%`
+
+const EMPTY_HOSPITAL = { name: '', location: 'Bangalore', payout_basis: 'share', payout_percentage: '80', fixed_fee: '0', tds_rate: '10', deduction_rate: '2', settlement_cycle: '30 days', finance_contact_name: '', finance_contact_email: '', finance_contact_phone: '' }
+
+const describeRule = (h) => h.payout_basis === 'fixed'
+  ? `${formatMoney(h.fixed_fee)} fixed per case`
+  : `${h.payout_percentage}% revenue share`
 
 async function api(path, opts = {}) {
   const session = JSON.parse(localStorage.getItem('doctrack_session') || '{}')
@@ -51,7 +58,8 @@ function App() {
   const [showModal, setShowModal] = useState(null)
   const [modalStep, setModalStep] = useState(1)
   const [procForm, setProcForm] = useState({ hospital_id: '', date: new Date().toISOString().split('T')[0], patient_name: '', procedure_type: 'Consultation', cases: '1', gross_amount: '' })
-  const [hospForm, setHospForm] = useState({ name: '', location: 'Bangalore', payout_percentage: '80', fixed_fee: '0', tds_rate: '10', deduction_rate: '2', settlement_cycle: '30 days', finance_contact_name: '', finance_contact_email: '', finance_contact_phone: '' })
+  const [hospForm, setHospForm] = useState(EMPTY_HOSPITAL)
+  const [showAuth, setShowAuth] = useState(false)
   const [payoutForm, setPayoutForm] = useState({ hospital_id: '', date: new Date().toISOString().split('T')[0], period: '', actual_net: '', transaction_ref: '', procedure_ids: [] })
   const [ledgerFilter, setLedgerFilter] = useState('All')
   const [reconTab, setReconTab] = useState('Summary')
@@ -115,7 +123,7 @@ function App() {
       const h = await api('/hospitals', { method: 'POST', body: JSON.stringify({ ...hospForm, payout_percentage: Number(hospForm.payout_percentage), fixed_fee: Number(hospForm.fixed_fee), tds_rate: Number(hospForm.tds_rate), deduction_rate: Number(hospForm.deduction_rate) }) })
       setHospitals(prev => [h, ...prev])
       setShowModal(null)
-      setHospForm({ name: '', location: 'Bangalore', payout_percentage: '80', fixed_fee: '0', tds_rate: '10', deduction_rate: '2', settlement_cycle: '30 days', finance_contact_name: '', finance_contact_email: '', finance_contact_phone: '' })
+      setHospForm(EMPTY_HOSPITAL)
       load()
     } catch (err) { console.error(err) }
   }
@@ -166,12 +174,15 @@ function App() {
 
   const selectedHospital = hospitals.find(h => h.id === Number(procForm.hospital_id))
   const waterfall = selectedHospital && procForm.gross_amount ? (() => {
-    const g = Number(procForm.gross_amount)
-    const share = g * (selectedHospital.payout_percentage / 100)
+    const cases = Math.max(1, Number(procForm.cases) || 1)
+    const perCase = Number(procForm.gross_amount)
+    const gross = perCase * cases
+    const share = selectedHospital.payout_basis === 'fixed'
+      ? Number(selectedHospital.fixed_fee) * cases
+      : gross * (selectedHospital.payout_percentage / 100)
     const tds = share * (selectedHospital.tds_rate / 100)
     const ded = share * (selectedHospital.deduction_rate / 100)
-    const net = share - tds - ded - selectedHospital.fixed_fee
-    return { gross: g, share, tds, ded, fixedFee: selectedHospital.fixed_fee, net }
+    return { cases, perCase, gross, share, tds, ded, net: share - tds - ded }
   })() : null
 
   const filteredProcedures = ledgerFilter === 'All' ? procedures : procedures.filter(p => p.status === ledgerFilter)
@@ -341,10 +352,12 @@ function App() {
                 </div>
                 <div className="hospital-card-body">
                   <div className="payout-rules">
-                    <div className="payout-rule"><div className="payout-rule-label">Revenue Share</div><div className="payout-rule-value">{h.payout_percentage}%</div></div>
+                    {h.payout_basis === 'fixed'
+                      ? <div className="payout-rule"><div className="payout-rule-label">Fixed Fee / Case</div><div className="payout-rule-value">{formatMoney(h.fixed_fee)}</div></div>
+                      : <div className="payout-rule"><div className="payout-rule-label">Revenue Share</div><div className="payout-rule-value">{h.payout_percentage}%</div></div>}
                     <div className="payout-rule"><div className="payout-rule-label">TDS Rate</div><div className="payout-rule-value">{h.tds_rate}%</div></div>
                     <div className="payout-rule"><div className="payout-rule-label">Deductions</div><div className="payout-rule-value">{h.deduction_rate}%</div></div>
-                    <div className="payout-rule"><div className="payout-rule-label">Fixed Fee</div><div className="payout-rule-value">{formatMoney(h.fixed_fee)}</div></div>
+                    <div className="payout-rule"><div className="payout-rule-label">Basis</div><div className="payout-rule-value">{h.payout_basis === 'fixed' ? 'Fixed' : 'Share'}</div></div>
                     <div className="payout-rule"><div className="payout-rule-label">Settlement</div><div className="payout-rule-value">{h.settlement_cycle}</div></div>
                   </div>
                   {h.finance_contact_name && (
@@ -608,25 +621,25 @@ function App() {
                 <>
                   <div className="form-grid mb-4">
                     <div className="form-field full">
-                      <label className="form-label">Billing Amount (Gross)</label>
+                      <label className="form-label">Billing Amount per Case (Gross)</label>
                       <input className="form-input" type="number" min="0" value={procForm.gross_amount} onChange={e => setProcForm({...procForm, gross_amount: e.target.value})} placeholder="₹0" autoFocus />
+                      {Number(procForm.cases) > 1 && <span className="form-hint">{procForm.cases} cases — totals below are multiplied accordingly</span>}
                     </div>
                   </div>
 
                   {selectedHospital && (
                     <div style={{ background: '#f8fafc', borderRadius: 'var(--radius-sm)', padding: '16px', marginBottom: '16px' }}>
                       <div className="text-xs font-semibold text-muted mb-2" style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}>Revenue Rule · {selectedHospital.name}</div>
-                      <div className="text-sm text-secondary">{selectedHospital.payout_percentage}% share · {selectedHospital.tds_rate}% TDS · {selectedHospital.deduction_rate}% deductions{selectedHospital.fixed_fee > 0 ? ` · ${formatMoney(selectedHospital.fixed_fee)} fixed fee` : ''}</div>
+                      <div className="text-sm text-secondary">{describeRule(selectedHospital)} · {selectedHospital.tds_rate}% TDS · {selectedHospital.deduction_rate}% deductions</div>
                     </div>
                   )}
 
                   {waterfall && (
                     <div className="waterfall">
-                      <div className="waterfall-row gross"><span className="waterfall-label">Gross Billing</span><span className="waterfall-amount">{formatMoney(waterfall.gross)}</span></div>
-                      <div className="waterfall-row"><span className="waterfall-label">Doctor Share ({selectedHospital?.payout_percentage}%)</span><span className="waterfall-amount">{formatMoney(waterfall.share)}</span></div>
-                      <div className="waterfall-row deduction"><span className="waterfall-label">TDS ({selectedHospital?.tds_rate}%)</span><span className="waterfall-amount">{formatMoney(waterfall.tds)}</span></div>
-                      <div className="waterfall-row deduction"><span className="waterfall-label">Deductions ({selectedHospital?.deduction_rate}%)</span><span className="waterfall-amount">{formatMoney(waterfall.ded)}</span></div>
-                      {waterfall.fixedFee > 0 && <div className="waterfall-row deduction"><span className="waterfall-label">Fixed Fee</span><span className="waterfall-amount">{formatMoney(waterfall.fixedFee)}</span></div>}
+                      <div className="waterfall-row gross"><span className="waterfall-label">Gross Billing{waterfall.cases > 1 ? ` (${waterfall.cases} × ${formatMoney(waterfall.perCase)})` : ''}</span><span className="waterfall-amount">{formatMoney(waterfall.gross)}</span></div>
+                      <div className="waterfall-row"><span className="waterfall-label">Doctor Share ({selectedHospital.payout_basis === 'fixed' ? `${formatMoney(selectedHospital.fixed_fee)} × ${waterfall.cases}` : `${selectedHospital.payout_percentage}%`})</span><span className="waterfall-amount">{formatMoney(waterfall.share)}</span></div>
+                      <div className="waterfall-row deduction"><span className="waterfall-label">TDS ({selectedHospital.tds_rate}%)</span><span className="waterfall-amount">{formatMoney(waterfall.tds)}</span></div>
+                      <div className="waterfall-row deduction"><span className="waterfall-label">Deductions ({selectedHospital.deduction_rate}%)</span><span className="waterfall-amount">{formatMoney(waterfall.ded)}</span></div>
                       <div className="waterfall-row net"><span className="waterfall-label">Net Expected Payout</span><span className="waterfall-amount">{formatMoney(waterfall.net)}</span></div>
                     </div>
                   )}
@@ -654,10 +667,18 @@ function App() {
                 <div className="form-grid">
                   <div className="form-field"><label className="form-label">Hospital Name *</label><input className="form-input" required value={hospForm.name} onChange={e => setHospForm({...hospForm, name: e.target.value})} /></div>
                   <div className="form-field"><label className="form-label">Location</label><input className="form-input" value={hospForm.location} onChange={e => setHospForm({...hospForm, location: e.target.value})} /></div>
-                  <div className="form-field"><label className="form-label">Revenue Share %</label><input className="form-input" type="number" min="0" max="100" value={hospForm.payout_percentage} onChange={e => setHospForm({...hospForm, payout_percentage: e.target.value})} /></div>
+                  <div className="form-field full">
+                    <label className="form-label">Payment Rule</label>
+                    <div className="basis-toggle">
+                      <button type="button" className={hospForm.payout_basis === 'share' ? 'active' : ''} onClick={() => setHospForm({...hospForm, payout_basis: 'share'})}>Revenue Share<small>% of gross billing</small></button>
+                      <button type="button" className={hospForm.payout_basis === 'fixed' ? 'active' : ''} onClick={() => setHospForm({...hospForm, payout_basis: 'fixed'})}>Fixed Fee<small>flat amount per case</small></button>
+                    </div>
+                  </div>
+                  {hospForm.payout_basis === 'fixed'
+                    ? <div className="form-field"><label className="form-label">Fixed Fee per Case (₹)</label><input className="form-input" type="number" min="0" value={hospForm.fixed_fee} onChange={e => setHospForm({...hospForm, fixed_fee: e.target.value})} /></div>
+                    : <div className="form-field"><label className="form-label">Revenue Share %</label><input className="form-input" type="number" min="0" max="100" value={hospForm.payout_percentage} onChange={e => setHospForm({...hospForm, payout_percentage: e.target.value})} /></div>}
                   <div className="form-field"><label className="form-label">TDS Rate %</label><input className="form-input" type="number" min="0" value={hospForm.tds_rate} onChange={e => setHospForm({...hospForm, tds_rate: e.target.value})} /></div>
                   <div className="form-field"><label className="form-label">Deduction Rate %</label><input className="form-input" type="number" min="0" value={hospForm.deduction_rate} onChange={e => setHospForm({...hospForm, deduction_rate: e.target.value})} /></div>
-                  <div className="form-field"><label className="form-label">Fixed Fee (₹)</label><input className="form-input" type="number" min="0" value={hospForm.fixed_fee} onChange={e => setHospForm({...hospForm, fixed_fee: e.target.value})} /></div>
                   <div className="form-field"><label className="form-label">Settlement Cycle</label><input className="form-input" value={hospForm.settlement_cycle} onChange={e => setHospForm({...hospForm, settlement_cycle: e.target.value})} /></div>
                   <div className="form-field"><label className="form-label">Finance Contact</label><input className="form-input" value={hospForm.finance_contact_name} onChange={e => setHospForm({...hospForm, finance_contact_name: e.target.value})} placeholder="Name" /></div>
                   <div className="form-field"><label className="form-label">Contact Email</label><input className="form-input" type="email" value={hospForm.finance_contact_email} onChange={e => setHospForm({...hospForm, finance_contact_email: e.target.value})} /></div>
@@ -741,10 +762,15 @@ function App() {
   // AUTH SCREENS
   // ═══════════════════════════════════════
 
+  if (!session.loggedIn && !showAuth) {
+    return <Welcome onLogin={() => { setAuthView('login'); setShowAuth(true) }} onSignup={() => { setAuthView('signup'); setSignupError(''); setShowAuth(true) }} />
+  }
+
   if (!session.loggedIn) {
     return (
       <div className="login-shell">
         <div className="login-card">
+          <button className="login-back" onClick={() => setShowAuth(false)}><ArrowLeft size={14} /> Back to home</button>
           {authView === 'login' && (<>
             <div className="login-header">
               <img src="doctrack-logo.png" alt="DocTrack" className="login-logo" style={{ objectFit: 'contain' }} />

@@ -21,6 +21,7 @@ const SCHEMA = [
     user_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     location TEXT DEFAULT 'Bangalore',
+    payout_basis TEXT DEFAULT 'share',
     payout_percentage REAL DEFAULT 80,
     fixed_fee REAL DEFAULT 0,
     tds_rate REAL DEFAULT 10,
@@ -159,10 +160,12 @@ const db = await connect();
 
 for (const stmt of SCHEMA) await db.exec(stmt);
 
-try {
-    await db.exec(`ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'`);
-} catch {
-    // column already exists on databases created before it was added
+// Columns added after the initial schema; ALTER fails harmlessly once they exist.
+for (const stmt of [
+    `ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'`,
+    `ALTER TABLE hospitals ADD COLUMN payout_basis TEXT DEFAULT 'share'`,
+]) {
+    try { await db.exec(stmt); } catch { /* already applied */ }
 }
 
 const adminHash = crypto.createHash('sha256').update(process.env.ADMIN_PASSWORD || 'admin123').digest('hex');

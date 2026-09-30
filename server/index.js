@@ -15,6 +15,18 @@ function hashPassword(password) {
     return crypto.createHash('sha256').update(password).digest('hex');
 }
 
+// amountPerCase is billed per case; the doctor's share is either a % of gross or a fixed fee per case.
+function calcWaterfall(hospital, amountPerCase, cases) {
+    const n = Math.max(1, Number(cases) || 1);
+    const gross_amount = (Number(amountPerCase) || 0) * n;
+    const doctor_share = hospital.payout_basis === 'fixed'
+        ? (Number(hospital.fixed_fee) || 0) * n
+        : gross_amount * (hospital.payout_percentage / 100);
+    const tds_amount = doctor_share * (hospital.tds_rate / 100);
+    const deduction_amount = doctor_share * (hospital.deduction_rate / 100);
+    return { cases: n, gross_amount, doctor_share, tds_amount, deduction_amount, net_expected: doctor_share - tds_amount - deduction_amount };
+}
+
 const auth = (req, res, next) => {
     const userId = req.headers['x-user-id'];
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -87,13 +99,14 @@ app.get('/api/hospitals', auth, async (req, res) => {
 });
 
 app.post('/api/hospitals', auth, async (req, res) => {
-    const { name, location, payout_percentage, fixed_fee, tds_rate, deduction_rate, settlement_cycle, finance_contact_name, finance_contact_email, finance_contact_phone } = req.body;
+    const { name, location, payout_basis, payout_percentage, fixed_fee, tds_rate, deduction_rate, settlement_cycle, finance_contact_name, finance_contact_email, finance_contact_phone } = req.body;
     if (!name) return res.status(400).json({ error: 'Hospital name is required.' });
+    if (payout_basis && !['share', 'fixed'].includes(payout_basis)) return res.status(400).json({ error: 'payout_basis must be share or fixed.' });
     try {
         const result = await dbRun(
-            `INSERT INTO hospitals (user_id, name, location, payout_percentage, fixed_fee, tds_rate, deduction_rate, settlement_cycle, finance_contact_name, finance_contact_email, finance_contact_phone)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [req.userId, name, location || 'Bangalore', payout_percentage ?? 80, fixed_fee ?? 0, tds_rate ?? 10, deduction_rate ?? 2, settlement_cycle || '30 days', finance_contact_name || null, finance_contact_email || null, finance_contact_phone || null]
+            `INSERT INTO hospitals (user_id, name, location, payout_basis, payout_percentage, fixed_fee, tds_rate, deduction_rate, settlement_cycle, finance_contact_name, finance_contact_email, finance_contact_phone)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [req.userId, name, location || 'Bangalore', payout_basis || 'share', payout_percentage ?? 80, fixed_fee ?? 0, tds_rate ?? 10, deduction_rate ?? 2, settlement_cycle || '30 days', finance_contact_name || null, finance_contact_email || null, finance_contact_phone || null]
         );
         const hospital = await dbGet('SELECT * FROM hospitals WHERE id = ?', [result.lastID]);
         res.json(hospital);
@@ -103,7 +116,8 @@ app.post('/api/hospitals', auth, async (req, res) => {
 });
 
 app.put('/api/hospitals/:id', auth, async (req, res) => {
-    const fields = ['name', 'location', 'payout_percentage', 'fixed_fee', 'tds_rate', 'deduction_rate', 'settlement_cycle', 'finance_contact_name', 'finance_contact_email', 'finance_contact_phone'];
+    const fields = ['name', 'location', 'payout_basis', 'payout_percentage', 'fixed_fee', 'tds_rate', 'deduction_rate', 'settlement_cycle', 'finance_contact_name', 'finance_contact_email', 'finance_contact_phone'];
+    if (req.body.payout_basis && !['share', 'fixed'].includes(req.body.payout_basis)) return res.status(400).json({ error: 'payout_basis must be share or fixed.' });
     const sets = [];
     const params = [];
     for (const f of fields) {
@@ -158,16 +172,12 @@ app.post('/api/procedures', auth, async (req, res) => {
         const hospital = await dbGet('SELECT * FROM hospitals WHERE id = ? AND user_id = ?', [hospital_id, req.userId]);
         if (!hospital) return res.status(404).json({ error: 'Hospital not found.' });
 
-        const ga = gross_amount || 0;
-        const doctor_share = ga * (hospital.payout_percentage / 100);
-        const tds_amount = doctor_share * (hospital.tds_rate / 100);
-        const deduction_amount = doctor_share * (hospital.deduction_rate / 100);
-        const net_expected = doctor_share - tds_amount - deduction_amount - hospital.fixed_fee;
+        const w = calcWaterfall(hospital, gross_amount, cases);
 
         const result = await dbRun(
             `INSERT INTO procedures (user_id, hospital_id, date, patient_name, procedure_type, cases, gross_amount, doctor_share, tds_amount, deduction_amount, net_expected)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [req.userId, hospital_id, date, patient_name || null, procedure_type || 'Consultation', cases || 1, ga, doctor_share, tds_amount, deduction_amount, net_expected]
+            [req.userId, hospital_id, date, patient_name || null, procedure_type || 'Consultation', w.cases, w.gross_amount, w.doctor_share, w.tds_amount, w.deduction_amount, w.net_expected]
         );
         const proc = await dbGet(
             `SELECT p.*, h.name as hospital_name FROM procedures p JOIN hospitals h ON p.hospital_id = h.id WHERE p.id = ?`,
@@ -180,7 +190,7 @@ app.post('/api/procedures', auth, async (req, res) => {
 });
 
 app.put('/api/procedures/:id', auth, async (req, res) => {
-    const fields = ['status', 'patient_name', 'procedure_type', 'cases', 'gross_amount', 'notes', 'date'];
+    const fields = ['status', 'patient_name', 'procedure_type', 'notes', 'date'];
     const sets = [];
     const params = [];
     for (const f of fields) {
@@ -189,9 +199,20 @@ app.put('/api/procedures/:id', auth, async (req, res) => {
             params.push(req.body[f]);
         }
     }
-    if (sets.length === 0) return res.status(400).json({ error: 'Nothing to update.' });
-    params.push(req.params.id, req.userId);
     try {
+        if (req.body.cases !== undefined || req.body.gross_amount !== undefined) {
+            const existing = await dbGet('SELECT * FROM procedures WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
+            if (!existing) return res.status(404).json({ error: 'Procedure not found.' });
+            const hospital = await dbGet('SELECT * FROM hospitals WHERE id = ?', [existing.hospital_id]);
+            const perCase = req.body.gross_amount ?? existing.gross_amount / (existing.cases || 1);
+            const w = calcWaterfall(hospital, perCase, req.body.cases ?? existing.cases);
+            for (const k of ['cases', 'gross_amount', 'doctor_share', 'tds_amount', 'deduction_amount', 'net_expected']) {
+                sets.push(`${k} = ?`);
+                params.push(w[k]);
+            }
+        }
+        if (sets.length === 0) return res.status(400).json({ error: 'Nothing to update.' });
+        params.push(req.params.id, req.userId);
         await dbRun(`UPDATE procedures SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`, params);
         const proc = await dbGet(
             `SELECT p.*, h.name as hospital_name FROM procedures p JOIN hospitals h ON p.hospital_id = h.id WHERE p.id = ?`,
