@@ -207,7 +207,8 @@ app.put('/api/hospitals/:id', auth, async (req, res) => {
     if (sets.length === 0) return res.status(400).json({ error: 'Nothing to update.' });
     params.push(req.params.id, req.userId);
     try {
-        await dbRun(`UPDATE hospitals SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`, params);
+        const result = await dbRun(`UPDATE hospitals SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`, params);
+        if (result.changes === 0) return res.status(404).json({ error: 'Hospital not found.' });
         const hospital = await dbGet('SELECT * FROM hospitals WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
         res.json((await attachServices([hospital], req.userId))[0]);
     } catch (err) {

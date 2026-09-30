@@ -126,6 +126,7 @@ function App() {
 
   const [hospForm, setHospForm] = useState(EMPTY_HOSPITAL)
   const [hospError, setHospError] = useState('')
+  const [editingHospital, setEditingHospital] = useState(null)
   const [serviceModal, setServiceModal] = useState(null)
   const [serviceError, setServiceError] = useState('')
   const [payoutForm, setPayoutForm] = useState(EMPTY_PAYOUT)
@@ -299,10 +300,35 @@ function App() {
 
   // ── Hospitals & services ──
 
+  const openAddHospital = () => { setHospForm(EMPTY_HOSPITAL); setEditingHospital(null); setHospError(''); setShowModal('hospital') }
+
+  const openEditHospital = (h) => {
+    setHospForm({
+      name: h.name, location: h.location, payout_basis: h.payout_basis, payout_percentage: String(h.payout_percentage),
+      fixed_fee: String(h.fixed_fee), tds_rate: String(h.tds_rate), deduction_rate: String(h.deduction_rate),
+      settlement_cycle: h.settlement_cycle, finance_contact_name: h.finance_contact_name || '',
+      finance_contact_email: h.finance_contact_email || '', finance_contact_phone: h.finance_contact_phone || '',
+    })
+    setEditingHospital(h.id)
+    setHospError('')
+    setShowModal('hospital')
+  }
+
   const saveHospital = async (e) => {
     e.preventDefault()
+    const body = JSON.stringify({ ...hospForm, payout_percentage: Number(hospForm.payout_percentage), fixed_fee: Number(hospForm.fixed_fee), tds_rate: Number(hospForm.tds_rate), deduction_rate: Number(hospForm.deduction_rate) })
     try {
-      const h = await api('/hospitals', { method: 'POST', body: JSON.stringify({ ...hospForm, payout_percentage: Number(hospForm.payout_percentage), fixed_fee: Number(hospForm.fixed_fee), tds_rate: Number(hospForm.tds_rate), deduction_rate: Number(hospForm.deduction_rate) }) })
+      if (editingHospital) {
+        await api(`/hospitals/${editingHospital}`, { method: 'PUT', body })
+        setShowModal(null)
+        setEditingHospital(null)
+        setHospForm(EMPTY_HOSPITAL)
+        setHospError('')
+        setToast('Hospital updated')
+        load()
+        return
+      }
+      const h = await api('/hospitals', { method: 'POST', body })
       setShowModal(null)
       setHospForm(EMPTY_HOSPITAL)
       setHospError('')
@@ -430,7 +456,7 @@ function App() {
             <FileText size={56} className="empty-state-icon" />
             <h3>No data yet</h3>
             <p>Add a hospital with its services, then log your first entry.</p>
-            <button className="btn btn-primary" onClick={() => setShowModal('hospital')}><Plus size={16} /> Add Hospital</button>
+            <button className="btn btn-primary" onClick={openAddHospital}><Plus size={16} /> Add Hospital</button>
           </div></div>
         </div>
       )
@@ -551,7 +577,7 @@ function App() {
     <div className="animate-in">
       <div className="page-header">
         <div><h1>Hospitals</h1><p className="page-subtitle">Payout rules, services & pricing</p></div>
-        <button className="btn btn-primary" onClick={() => setShowModal('hospital')}><Plus size={16} /> Add Hospital</button>
+        <button className="btn btn-primary" onClick={openAddHospital}><Plus size={16} /> Add Hospital</button>
       </div>
 
       {hospitals.length === 0 ? (
@@ -559,7 +585,7 @@ function App() {
           <Building2 size={56} className="empty-state-icon" />
           <h3>No hospitals yet</h3>
           <p>Add your first hospital to start tracking revenue.</p>
-          <button className="btn btn-primary" onClick={() => setShowModal('hospital')}><Plus size={16} /> Add Hospital</button>
+          <button className="btn btn-primary" onClick={openAddHospital}><Plus size={16} /> Add Hospital</button>
         </div></div>
       ) : (
         <div className="hospital-grid">
@@ -569,7 +595,10 @@ function App() {
               <article key={h.id} className="hospital-card">
                 <div className="hospital-cover">
                   <span className="hospital-initials" aria-hidden="true">{h.name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()}</span>
-                  <button className="btn-ghost btn-sm hospital-delete" aria-label="Delete hospital" onClick={() => deleteHospital(h.id)}><Trash2 size={14} /></button>
+                  <div className="hospital-actions">
+                    <button className="btn-ghost btn-sm hospital-action" aria-label="Edit hospital" title="Edit" onClick={() => openEditHospital(h)}><Pencil size={14} /></button>
+                    <button className="btn-ghost btn-sm hospital-action" aria-label="Delete hospital" title="Delete" onClick={() => deleteHospital(h.id)}><Trash2 size={14} /></button>
+                  </div>
                   <div className="hospital-cover-meta">
                     <strong>{describeRule(h)}</strong>
                     <span>{h.tds_rate}% TDS · {h.deduction_rate}% deductions · settles in {h.settlement_cycle}</span>
@@ -661,7 +690,7 @@ function App() {
   // MODALS
   // ═══════════════════════════════════════
 
-  const closeModal = () => { setShowModal(null); setServiceModal(null); setEditingEntry(null); setEditingPayout(null) }
+  const closeModal = () => { setShowModal(null); setServiceModal(null); setEditingEntry(null); setEditingPayout(null); setEditingHospital(null) }
 
   const renderModals = () => {
     if (statusChange) {
@@ -834,7 +863,7 @@ function App() {
       return (
         <div className="modal-backdrop" onClick={closeModal}>
           <div className="modal animate-slide-up" role="dialog" aria-labelledby="hosp-title" onClick={e => e.stopPropagation()}>
-            <div className="modal-header"><h2 id="hosp-title">Add Hospital</h2><button className="btn-ghost" aria-label="Close" onClick={closeModal}><X size={20} /></button></div>
+            <div className="modal-header"><h2 id="hosp-title">{editingHospital ? 'Edit Hospital' : 'Add Hospital'}</h2><button className="btn-ghost" aria-label="Close" onClick={closeModal}><X size={20} /></button></div>
             <form onSubmit={saveHospital}>
               <div className="modal-body">
                 <div className="form-grid">
@@ -859,7 +888,7 @@ function App() {
                 </div>
                 {hospError && <div className="form-error" role="alert">{hospError}</div>}
               </div>
-              <div className="modal-footer"><button type="button" className="btn btn-outline" onClick={closeModal}>Cancel</button><button type="submit" className="btn btn-primary">Save & Add Services</button></div>
+              <div className="modal-footer"><button type="button" className="btn btn-outline" onClick={closeModal}>Cancel</button><button type="submit" className="btn btn-primary">{editingHospital ? 'Save Changes' : 'Save & Add Services'}</button></div>
             </form>
           </div>
         </div>
