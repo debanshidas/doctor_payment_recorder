@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Eye, EyeOff, LayoutDashboard, Building2, FileText, IndianRupee, AlertTriangle, LogOut, Menu, X, Plus, User, ChevronDown, ChevronRight, Receipt, CheckCircle2, ArrowLeft, ArrowRight, Trash2, Pencil } from 'lucide-react'
 import Welcome from './Welcome.jsx'
+import { SettlementBars, MetricBars, Donut, LineChart, ChartEmpty, STATUS_COLOR } from './Charts.jsx'
 import './App.css'
 
 const API = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '') + '/api'
@@ -14,6 +15,10 @@ const formatDate = (iso) => {
   if (!iso) return '—'
   const d = new Date(`${iso}T00:00:00`)
   return isNaN(d) ? iso : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+const monthLabel = (ym) => {
+  const d = new Date(`${ym}-01T00:00:00`)
+  return isNaN(d) ? ym : d.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' })
 }
 const GrossCell = ({ p }) => (
   <td className="amount">
@@ -112,6 +117,7 @@ function App() {
   const [hospitals, setHospitals] = useState([])
   const [procedures, setProcedures] = useState([])
   const [payouts, setPayouts] = useState([])
+  const [analytics, setAnalytics] = useState(null)
 
   const [showModal, setShowModal] = useState(null)
   const [toast, setToast] = useState('')
@@ -134,15 +140,18 @@ function App() {
   const [statusChange, setStatusChange] = useState(null)
 
   const [ledgerHospital, setLedgerHospital] = useState('All')
+  const [ledgerService, setLedgerService] = useState('All')
+  const [ledgerDate, setLedgerDate] = useState('all')
+  const [ledgerRange, setLedgerRange] = useState({ from: '', to: '' })
   const [expandedRow, setExpandedRow] = useState(null)
 
   const load = useCallback(async () => {
     if (!session.loggedIn) return
     try {
-      const [d, h, p, py] = await Promise.all([
-        api('/dashboard'), api('/hospitals'), api('/procedures'), api('/payouts')
+      const [d, h, p, py, an] = await Promise.all([
+        api('/dashboard'), api('/hospitals'), api('/procedures'), api('/payouts'), api('/analytics')
       ])
-      setDashboard(d); setHospitals(h); setProcedures(p); setPayouts(py)
+      setDashboard(d); setHospitals(h); setProcedures(p); setPayouts(py); setAnalytics(an)
     } catch (e) { console.error('Load failed:', e) }
   }, [session.loggedIn])
 
@@ -491,6 +500,28 @@ function App() {
           </div></div>
         )}
 
+        {analytics && (<>
+          <div className="card mb-6">
+            <div className="card-header"><h3>Payments by Hospital</h3><span className="text-xs text-muted">Earned, split into received · under review · pending</span></div>
+            <div className="card-body"><SettlementBars rows={analytics.revenueByHospital.filter(h => h.earned > 0)} /></div>
+          </div>
+
+          <div className="analytics-head"><h2>Analytics</h2><span className="text-sm text-muted">{analytics.totals.rendered} services rendered · {analytics.totals.entries} {analytics.totals.entries === 1 ? 'visit' : 'visits'} · {analytics.totals.hospitals} {analytics.totals.hospitals === 1 ? 'hospital' : 'hospitals'}</span></div>
+          <div className="analytics-grid">
+            <div className="card"><div className="card-header"><h3>Payment status</h3></div><div className="card-body">
+              <Donut centerLabel="payments" data={analytics.paymentStatus.map(s => ({ label: s.status, value: s.count, color: STATUS_COLOR[s.status] || '#94a3b8' }))} />
+            </div></div>
+            <div className="card"><div className="card-header"><h3>Services by revenue</h3></div><div className="card-body">
+              <MetricBars data={analytics.servicesByType} valueKey="revenue" labelKey="name" />
+            </div></div>
+            <div className="card analytics-wide"><div className="card-header"><h3>Monthly revenue</h3></div><div className="card-body">
+              {analytics.monthlyTrend.length > 0
+                ? <LineChart valueKey="revenue" points={analytics.monthlyTrend.map(m => ({ label: monthLabel(m.month), revenue: m.revenue }))} />
+                : <ChartEmpty />}
+            </div></div>
+          </div>
+        </>)}
+
         <div className="dash-grid">
           <div className="card">
             <div className="card-header"><h3>Recent Entries</h3><button className="card-link" onClick={() => { setLedgerHospital('All'); setPage('Ledger') }}>View all <ArrowRight size={14} /></button></div>
@@ -522,8 +553,29 @@ function App() {
   // RENDER: Ledger
   // ═══════════════════════════════════════
 
+  const baseService = (p) => (p.procedure_type || '').split(' — ')[0]
+
   const renderLedger = () => {
-    const list = ledgerHospital === 'All' ? procedures : procedures.filter(p => p.hospital_id === Number(ledgerHospital))
+    const serviceOptions = [...new Set(procedures.map(baseService))].filter(Boolean).sort()
+    const inRange = (dateStr) => {
+      if (ledgerDate === 'all') return true
+      const d = new Date(`${dateStr}T00:00:00`)
+      const now = new Date(); now.setHours(0, 0, 0, 0)
+      if (ledgerDate === 'today') return dateStr === today()
+      if (ledgerDate === 'week') { const s = new Date(now); s.setDate(now.getDate() - ((now.getDay() + 6) % 7)); return d >= s && d <= now }
+      if (ledgerDate === 'month') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+      if (ledgerDate === 'custom') { const f = ledgerRange.from, t = ledgerRange.to; return (!f || dateStr >= f) && (!t || dateStr <= t) }
+      return true
+    }
+    const list = procedures.filter(p =>
+      (ledgerHospital === 'All' || p.hospital_id === Number(ledgerHospital)) &&
+      (ledgerService === 'All' || baseService(p) === ledgerService) &&
+      inRange(p.date)
+    )
+    const dateLabel = { all: 'All dates', today: 'Today', week: 'This week', month: 'This month', custom: 'Custom range' }
+    const active = ledgerHospital !== 'All' || ledgerService !== 'All' || ledgerDate !== 'all'
+    const clearFilters = () => { setLedgerHospital('All'); setLedgerService('All'); setLedgerDate('all'); setLedgerRange({ from: '', to: '' }) }
+
     return (
       <div className="animate-in">
         <div className="page-header">
@@ -532,13 +584,49 @@ function App() {
         </div>
 
         <div className="filter-bar">
-          <button className={`filter-chip ${ledgerHospital === 'All' ? 'active' : ''}`} onClick={() => setLedgerHospital('All')}>All ({procedures.length})</button>
+          <button className={`filter-chip ${ledgerHospital === 'All' ? 'active' : ''}`} onClick={() => setLedgerHospital('All')}>All hospitals ({procedures.length})</button>
           {hospitals.map(h => (
             <button key={h.id} className={`filter-chip ${ledgerHospital === String(h.id) ? 'active' : ''}`} onClick={() => setLedgerHospital(String(h.id))}>
               {h.name} ({procedures.filter(p => p.hospital_id === h.id).length})
             </button>
           ))}
         </div>
+
+        <div className="ledger-filters">
+          <div className="lf-field">
+            <label htmlFor="lf-service">Service</label>
+            <select id="lf-service" className="form-select" value={ledgerService} onChange={e => setLedgerService(e.target.value)}>
+              <option value="All">All services</option>
+              {serviceOptions.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div className="lf-field">
+            <label htmlFor="lf-date">Date</label>
+            <select id="lf-date" className="form-select" value={ledgerDate} onChange={e => setLedgerDate(e.target.value)}>
+              <option value="all">All dates</option>
+              <option value="today">Today</option>
+              <option value="week">This week</option>
+              <option value="month">This month</option>
+              <option value="custom">Custom range</option>
+            </select>
+          </div>
+          {ledgerDate === 'custom' && (
+            <>
+              <div className="lf-field"><label htmlFor="lf-from">From</label><input id="lf-from" type="date" className="form-input" value={ledgerRange.from} onChange={e => setLedgerRange({ ...ledgerRange, from: e.target.value })} /></div>
+              <div className="lf-field"><label htmlFor="lf-to">To</label><input id="lf-to" type="date" className="form-input" value={ledgerRange.to} onChange={e => setLedgerRange({ ...ledgerRange, to: e.target.value })} /></div>
+            </>
+          )}
+          {active && <button className="btn btn-outline btn-sm lf-clear" onClick={clearFilters}><X size={14} /> Clear filters</button>}
+        </div>
+
+        {active && (
+          <div className="lf-applied">
+            Showing <strong>{list.length}</strong> of {procedures.length} entries
+            {ledgerHospital !== 'All' && <span className="lf-tag">{hospitals.find(h => h.id === Number(ledgerHospital))?.name}</span>}
+            {ledgerService !== 'All' && <span className="lf-tag">{ledgerService}</span>}
+            {ledgerDate !== 'all' && <span className="lf-tag">{dateLabel[ledgerDate]}{ledgerDate === 'custom' && (ledgerRange.from || ledgerRange.to) ? `: ${ledgerRange.from || '…'} → ${ledgerRange.to || '…'}` : ''}</span>}
+          </div>
+        )}
 
         <div className="card"><div className="card-body compact"><div className="table-wrap"><table className="data-table"><thead><tr>
           <th style={{ width: 32 }}></th><th>Date</th><th>Hospital</th><th>Service</th><th>Cases</th><th>Gross</th><th>Net Expected</th><th></th>
@@ -563,7 +651,7 @@ function App() {
               </div></div></td></tr>
             )}
           </>))}
-          {list.length === 0 && <tr><td colSpan={8} className="text-center text-muted" style={{ padding: '32px' }}>No entries yet</td></tr>}
+          {list.length === 0 && <tr><td colSpan={8} className="text-center text-muted" style={{ padding: '32px' }}>{procedures.length === 0 ? 'No entries yet' : 'No entries match these filters'}</td></tr>}
         </tbody></table></div></div></div>
       </div>
     )
@@ -643,6 +731,26 @@ function App() {
         <div><h1>Payments</h1><p className="page-subtitle">Money received from hospitals</p></div>
         <button className="btn btn-primary" onClick={() => { setPayoutForm(EMPTY_PAYOUT()); setEditingPayout(null); setPayoutError(''); setShowModal('payout') }}><Plus size={16} /> Record Payment</button>
       </div>
+
+      {(() => {
+        const settle = (dashboard?.hospitalSummary || []).filter(h => h.earned > 0)
+        if (settle.length === 0) return null
+        return (
+          <div className="card mb-6"><div className="card-header"><h3>Amount to be Settled</h3><span className="text-xs text-muted">Earned − Received (Under Review not counted as received)</span></div>
+            <div className="card-body compact"><div className="table-wrap"><table className="data-table"><thead><tr>
+              <th>Hospital</th><th>Earned</th><th>Received</th><th>Under Review</th><th>To be Settled</th>
+            </tr></thead><tbody>
+              {settle.map(h => (
+                <tr key={h.id}><td className="font-semibold">{h.name}</td>
+                  <td className="amount">{formatMoney(h.earned)}</td>
+                  <td className="amount text-green">{formatMoney(h.received)}</td>
+                  <td className="amount text-amber">{formatMoney(h.under_review)}</td>
+                  <td className="amount"><span className={`settle-amount ${h.to_be_settled > 0 ? 'due' : 'clear'}`}>{formatMoney(h.to_be_settled)}</span></td></tr>
+              ))}
+            </tbody></table></div></div>
+          </div>
+        )
+      })()}
 
       {payouts.length === 0 ? (
         <div className="card"><div className="empty-state">

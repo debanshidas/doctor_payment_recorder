@@ -481,6 +481,7 @@ app.get('/api/dashboard', auth, async (req, res) => {
             received: money.received,
             underReview: money.underReview,
             pending: money.pending,
+            toBeSettled: money.toBeSettled,
             collectionRate,
             totalTds: totals.totalTds,
             procedureCount: totals.procedureCount,
@@ -510,6 +511,8 @@ async function moneySummary(userId, hospitalId = null) {
         underReview: p.underReview,
         underReviewCount: p.underReviewCount || 0,
         pending: Math.max(0, e.earned - p.received - p.underReview),
+        // What still needs settling: everything earned that has not been confirmed received (Under Review not counted as received).
+        toBeSettled: Math.max(0, e.earned - p.received),
     };
 }
 
@@ -520,10 +523,52 @@ async function hospitalMoney(userId) {
          WHERE h.user_id = ? GROUP BY h.id ORDER BY h.name`, [userId]);
     for (const h of hospitals) {
         const m = await moneySummary(userId, h.id);
-        h.earned = m.earned; h.received = m.received; h.under_review = m.underReview; h.pending = m.pending;
+        h.earned = m.earned; h.received = m.received; h.under_review = m.underReview; h.pending = m.pending; h.to_be_settled = m.toBeSettled;
     }
     return hospitals;
 }
+
+app.get('/api/analytics', auth, async (req, res) => {
+    try {
+        const summary = await moneySummary(req.userId);
+        const hospitalCount = await dbGet('SELECT COUNT(*) as c FROM hospitals WHERE user_id = ?', [req.userId]);
+        const svcCount = await dbGet('SELECT COUNT(*) as c FROM services WHERE user_id = ?', [req.userId]);
+        const t = await dbGet('SELECT COUNT(*) as entries, COALESCE(SUM(cases), 0) as rendered, COALESCE(SUM(gross_amount), 0) as revenue FROM procedures WHERE user_id = ?', [req.userId]);
+
+        // Group by the base service name, stripping any " — <type>" suffix from the stored label.
+        const servicesByType = await dbAll(
+            `SELECT CASE WHEN instr(procedure_type, ' — ') > 0
+                        THEN substr(procedure_type, 1, instr(procedure_type, ' — ') - 1)
+                        ELSE procedure_type END as name,
+                    COUNT(*) as count, COALESCE(SUM(cases), 0) as rendered,
+                    COALESCE(SUM(gross_amount), 0) as revenue, COALESCE(SUM(net_expected), 0) as earned
+             FROM procedures WHERE user_id = ?
+             GROUP BY name ORDER BY revenue DESC`, [req.userId]);
+
+        const revenueByHospital = await hospitalMoney(req.userId);
+
+        const monthlyTrend = await dbAll(
+            `SELECT strftime('%Y-%m', date) as month, COUNT(*) as entries,
+                    COALESCE(SUM(gross_amount), 0) as revenue, COALESCE(SUM(net_expected), 0) as earned
+             FROM procedures WHERE user_id = ? GROUP BY month ORDER BY month`, [req.userId]);
+
+        const paymentStatus = await dbAll(
+            `SELECT status, COUNT(*) as count, COALESCE(SUM(actual_net), 0) as amount
+             FROM payouts WHERE user_id = ? GROUP BY status`, [req.userId]);
+
+        res.json({
+            totals: {
+                entries: t.entries, rendered: t.rendered, revenue: t.revenue,
+                configuredServices: svcCount.c, hospitals: hospitalCount.c,
+                earned: summary.earned, received: summary.received, pending: summary.pending,
+                underReview: summary.underReview, toBeSettled: summary.toBeSettled,
+            },
+            servicesByType, revenueByHospital, monthlyTrend, paymentStatus,
+        });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to load analytics.' });
+    }
+});
 
 // ── Reconciliation ──
 

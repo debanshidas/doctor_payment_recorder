@@ -1471,6 +1471,58 @@ button { cursor: pointer; border: none; background: none; }
   }
 }
 
+/* ── Charts ── */
+
+.chart-empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+.cbars { display: flex; flex-direction: column; gap: 14px; }
+.cbars-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 2px; }
+.cbars-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.cbars-legend i { width: 10px; height: 10px; border-radius: 3px; }
+.cbar-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
+.cbar-name { font-size: 0.8125rem; font-weight: 600; color: var(--text); }
+.cbar-val { font-size: 0.75rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.cbar-track { display: flex; height: 14px; border-radius: 999px; overflow: hidden; background: var(--border-light); }
+.cbar-track.single { background: var(--border-light); }
+.cbar-track > div { height: 100%; transition: width 0.6s ease; }
+.cbar-track.single > div { border-radius: 999px; }
+
+.cdonut { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.cdonut-svg { width: 130px; height: 130px; flex-shrink: 0; }
+.cdonut-num { font-size: 18px; font-weight: 700; fill: var(--text); }
+.cdonut-lbl { font-size: 7px; fill: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.cdonut-legend { display: flex; flex-direction: column; gap: 8px; font-size: 0.8125rem; color: var(--text-secondary); }
+.cdonut-legend span { display: inline-flex; align-items: center; gap: 8px; }
+.cdonut-legend i { width: 10px; height: 10px; border-radius: 3px; }
+.cdonut-legend b { color: var(--text); font-weight: 600; margin-left: auto; }
+
+.cline { width: 100%; height: auto; }
+.cline-axis { font-size: 11px; fill: var(--muted); }
+
+.analytics-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: 4px 0 16px; }
+.analytics-head h2 { margin: 0; font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em; }
+.analytics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+.analytics-grid .analytics-wide { grid-column: 1 / -1; }
+@media (max-width: 768px) { .analytics-grid { grid-template-columns: 1fr; } }
+
+.settle-amount { font-weight: 700; }
+.settle-amount.due { color: var(--amber); }
+.settle-amount.clear { color: var(--green); }
+
+/* ── Ledger filters ── */
+
+.ledger-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-bottom: 12px; }
+.lf-field { display: flex; flex-direction: column; gap: 4px; }
+.lf-field label { font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); }
+.lf-field .form-select, .lf-field .form-input { min-width: 150px; }
+.lf-clear { align-self: flex-end; }
+.lf-applied { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 0.8125rem; color: var(--text-secondary); }
+.lf-tag { padding: 2px 10px; border-radius: 999px; background: var(--blue-bg); color: #2563eb; font-weight: 600; font-size: 0.75rem; border: 1px solid var(--blue-border); }
+
 /* ── Animations ── */
 
 @keyframes fadeIn {
