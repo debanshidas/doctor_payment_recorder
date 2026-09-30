@@ -295,6 +295,26 @@ app.put('/api/procedures/:id', auth, async (req, res) => {
         }
     }
     try {
+        const { service_id, service_type_id } = req.body;
+        if (service_id !== undefined) {
+            const existing = await dbGet('SELECT hospital_id FROM procedures WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
+            if (!existing) return res.status(404).json({ error: 'Procedure not found.' });
+            if (service_id === null) {
+                sets.push('service_id = ?', 'service_type_id = ?'); params.push(null, null);
+            } else {
+                const service = await dbGet('SELECT * FROM services WHERE id = ? AND hospital_id = ? AND user_id = ?', [service_id, existing.hospital_id, req.userId]);
+                if (!service) return res.status(404).json({ error: 'Service not found for this hospital.' });
+                let label = service.name;
+                let typeId = null;
+                if (service_type_id) {
+                    const type = await dbGet('SELECT * FROM service_types WHERE id = ? AND service_id = ? AND user_id = ?', [service_type_id, service_id, req.userId]);
+                    if (!type) return res.status(404).json({ error: 'Service type not found.' });
+                    label = `${service.name} — ${type.name}`;
+                    typeId = type.id;
+                }
+                sets.push('service_id = ?', 'service_type_id = ?', 'procedure_type = ?'); params.push(service.id, typeId, label);
+            }
+        }
         if (req.body.cases !== undefined || req.body.gross_amount !== undefined) {
             const existing = await dbGet('SELECT * FROM procedures WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
             if (!existing) return res.status(404).json({ error: 'Procedure not found.' });

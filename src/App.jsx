@@ -121,6 +121,8 @@ function App() {
   const [lastPick, setLastPick] = useState({ hospital_id: '', service_id: '' })
   const [entryForm, setEntryForm] = useState({ hospital_id: '', service_id: '', service_type_id: '', amount: '', cases: '1', date: today(), manual_service: '' })
   const [entryError, setEntryError] = useState('')
+  const [editingEntry, setEditingEntry] = useState(null)
+  const [editingPayout, setEditingPayout] = useState(null)
   const [saving, setSaving] = useState(false)
 
   const [hospForm, setHospForm] = useState(EMPTY_HOSPITAL)
@@ -214,8 +216,33 @@ function App() {
     if (!hospitalById(form.hospital_id)) form.hospital_id = hospitals.length === 1 ? String(hospitals[0].id) : ''
     form = applyService(form, pickService(hospitalById(form.hospital_id), lastPick.service_id))
     setEntryForm(form)
+    setEditingEntry(null)
     setEntryError('')
     setShowModal('entry')
+  }
+
+  const openEditEntry = (p) => {
+    const h = hospitalById(p.hospital_id)
+    const service = h?.services.find(s => s.id === p.service_id)
+    setEntryForm({
+      hospital_id: String(p.hospital_id),
+      service_id: service ? String(service.id) : MANUAL,
+      service_type_id: p.service_type_id ? String(p.service_type_id) : '',
+      amount: String(p.gross_amount / (p.cases || 1)),
+      cases: String(p.cases || 1),
+      date: p.date,
+      manual_service: service ? '' : p.procedure_type,
+    })
+    setEditingEntry(p.id)
+    setEntryError('')
+    setShowModal('entry')
+  }
+
+  const openEditPayout = (py) => {
+    setPayoutForm({ hospital_id: String(py.hospital_id), date: py.date, actual_net: String(py.actual_net), transaction_ref: py.transaction_ref || '', notes: py.notes || '', status: py.status })
+    setEditingPayout(py.id)
+    setPayoutError('')
+    setShowModal('payout')
   }
 
   const selectHospital = (id) => {
@@ -237,6 +264,21 @@ function App() {
     if (!(Number(f.amount) > 0)) return setEntryError('Amount must be greater than zero.')
     setSaving(true)
     try {
+      if (editingEntry) {
+        await api(`/procedures/${editingEntry}`, { method: 'PUT', body: JSON.stringify({
+          date: f.date, cases: Number(f.cases) || 1, gross_amount: Number(f.amount),
+          service_id: f.service_id === MANUAL ? null : Number(f.service_id),
+          service_type_id: f.service_type_id ? Number(f.service_type_id) : null,
+          ...(f.service_id === MANUAL && { procedure_type: f.manual_service.trim() }),
+        }) })
+        setToast('Entry updated')
+        setEntryError('')
+        setEditingEntry(null)
+        setShowModal(null)
+        load()
+        setSaving(false)
+        return
+      }
       await api('/procedures', { method: 'POST', body: JSON.stringify({
         hospital_id: Number(f.hospital_id), date: f.date, cases: Number(f.cases) || 1, gross_amount: Number(f.amount),
         service_id: f.service_id === MANUAL ? undefined : Number(f.service_id),
@@ -333,11 +375,17 @@ function App() {
     if (!payoutForm.hospital_id) return setPayoutError('Select a hospital.')
     if (!(Number(payoutForm.actual_net) > 0)) return setPayoutError('Enter the amount received.')
     try {
-      await api('/payouts', { method: 'POST', body: JSON.stringify({ ...payoutForm, hospital_id: Number(payoutForm.hospital_id), actual_net: Number(payoutForm.actual_net) }) })
+      if (editingPayout) {
+        await api(`/payouts/${editingPayout}`, { method: 'PUT', body: JSON.stringify({ date: payoutForm.date, actual_net: Number(payoutForm.actual_net), transaction_ref: payoutForm.transaction_ref, notes: payoutForm.notes, status: payoutForm.status }) })
+        setToast('Payment updated')
+      } else {
+        await api('/payouts', { method: 'POST', body: JSON.stringify({ ...payoutForm, hospital_id: Number(payoutForm.hospital_id), actual_net: Number(payoutForm.actual_net) }) })
+        setToast(payoutForm.status === 'Under Review' ? 'Payment recorded — under review' : 'Payment recorded')
+      }
       setShowModal(null)
+      setEditingPayout(null)
       setPayoutForm(EMPTY_PAYOUT())
       setPayoutError('')
-      setToast(payoutForm.status === 'Under Review' ? 'Payment recorded — under review' : 'Payment recorded')
       load()
     } catch (err) { setPayoutError(err.message) }
   }
@@ -475,7 +523,10 @@ function App() {
               <td>{expandedRow === p.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</td>
               <td className="nowrap">{formatDate(p.date)}</td><td className="font-semibold">{p.hospital_name}</td><td>{p.procedure_type}</td><td>{p.cases}</td>
               <GrossCell p={p} /><td className="amount text-green font-semibold">{formatMoney(p.net_expected)}</td>
-              <td><button className="btn-ghost btn-sm" aria-label="Delete entry" onClick={(e) => { e.stopPropagation(); deleteProcedure(p.id) }}><Trash2 size={14} /></button></td>
+              <td className="nowrap">
+                <button className="btn-ghost btn-sm" aria-label="Edit entry" title="Edit" onClick={(e) => { e.stopPropagation(); openEditEntry(p) }}><Pencil size={14} /></button>
+                <button className="btn-ghost btn-sm" aria-label="Delete entry" title="Delete" onClick={(e) => { e.stopPropagation(); deleteProcedure(p.id) }}><Trash2 size={14} /></button>
+              </td>
             </tr>
             {expandedRow === p.id && (
               <tr key={`${p.id}-detail`}><td colSpan={8}><div className="row-detail"><div className="row-detail-grid">
@@ -562,7 +613,7 @@ function App() {
     <div className="animate-in">
       <div className="page-header">
         <div><h1>Payments</h1><p className="page-subtitle">Money received from hospitals</p></div>
-        <button className="btn btn-primary" onClick={() => { setPayoutForm(EMPTY_PAYOUT()); setPayoutError(''); setShowModal('payout') }}><Plus size={16} /> Record Payment</button>
+        <button className="btn btn-primary" onClick={() => { setPayoutForm(EMPTY_PAYOUT()); setEditingPayout(null); setPayoutError(''); setShowModal('payout') }}><Plus size={16} /> Record Payment</button>
       </div>
 
       {payouts.length === 0 ? (
@@ -573,13 +624,14 @@ function App() {
         </div></div>
       ) : (
         <div className="card"><div className="card-header"><h3>All payments</h3><StatusLegend /></div><div className="card-body compact"><div className="table-wrap"><table className="data-table"><thead><tr>
-          <th>Date</th><th>Hospital</th><th>Reference</th><th>Amount</th><th>Status</th>
+          <th>Date</th><th>Hospital</th><th>Reference</th><th>Amount</th><th>Status</th><th></th>
         </tr></thead><tbody>
           {payouts.map(py => (
             <tr key={py.id} className={`status-row ${payoutBadge(py.status)}`}>
               <td className="nowrap">{formatDate(py.date)}</td><td className="font-semibold">{py.hospital_name}</td><td>{py.transaction_ref || '—'}</td>
               <td className="amount">{formatMoney(py.actual_net)}</td>
               <td><PayoutStatus p={py} onChange={requestStatusChange} /></td>
+              <td><button className="btn-ghost btn-sm" aria-label="Edit payment" title="Edit" disabled={py.status === 'Rejected'} onClick={() => openEditPayout(py)}><Pencil size={14} /></button></td>
             </tr>
           ))}
         </tbody></table></div></div></div>
@@ -653,7 +705,7 @@ function App() {
   // MODALS
   // ═══════════════════════════════════════
 
-  const closeModal = () => { setShowModal(null); setServiceModal(null) }
+  const closeModal = () => { setShowModal(null); setServiceModal(null); setEditingEntry(null); setEditingPayout(null) }
 
   const renderModals = () => {
     if (statusChange) {
@@ -692,13 +744,13 @@ function App() {
       return (
         <div className="modal-backdrop" onClick={closeModal}>
           <div className="modal modal-compact animate-slide-up" role="dialog" aria-labelledby="entry-title" onClick={e => e.stopPropagation()}>
-            <div className="modal-header"><h2 id="entry-title">Add Entry</h2><button className="btn-ghost" aria-label="Close" onClick={closeModal}><X size={20} /></button></div>
+            <div className="modal-header"><h2 id="entry-title">{editingEntry ? 'Edit Entry' : 'Add Entry'}</h2><button className="btn-ghost" aria-label="Close" onClick={closeModal}><X size={20} /></button></div>
             <form onSubmit={e => { e.preventDefault(); saveEntry(false) }}>
               <div className="modal-body">
                 <div className="form-grid">
                   <div className="form-field full">
                     <label className="form-label" htmlFor="entry-hospital">Hospital</label>
-                    <select id="entry-hospital" className="form-select" value={entryForm.hospital_id} onChange={e => selectHospital(e.target.value)} autoFocus={!entryForm.hospital_id}>
+                    <select id="entry-hospital" className="form-select" value={entryForm.hospital_id} onChange={e => selectHospital(e.target.value)} autoFocus={!entryForm.hospital_id} disabled={!!editingEntry}>
                       <option value="">Select hospital…</option>
                       {hospitals.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
                     </select>
@@ -759,8 +811,10 @@ function App() {
                 {entryError && <div className="form-error" role="alert">{entryError}</div>}
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-outline" onClick={() => saveEntry(true)} disabled={saving}>Save & Add Another</button>
-                <button type="submit" className="btn btn-success" disabled={saving}>{saving ? 'Saving…' : 'Save Entry'}</button>
+                {editingEntry
+                  ? <button type="button" className="btn btn-outline" onClick={closeModal}>Cancel</button>
+                  : <button type="button" className="btn btn-outline" onClick={() => saveEntry(true)} disabled={saving}>Save & Add Another</button>}
+                <button type="submit" className="btn btn-success" disabled={saving}>{saving ? 'Saving…' : editingEntry ? 'Save Changes' : 'Save Entry'}</button>
               </div>
             </form>
           </div>
@@ -860,13 +914,13 @@ function App() {
       return (
         <div className="modal-backdrop" onClick={closeModal}>
           <div className="modal modal-compact animate-slide-up" role="dialog" aria-labelledby="pay-title" onClick={e => e.stopPropagation()}>
-            <div className="modal-header"><h2 id="pay-title">Record Payment</h2><button className="btn-ghost" aria-label="Close" onClick={closeModal}><X size={20} /></button></div>
+            <div className="modal-header"><h2 id="pay-title">{editingPayout ? 'Edit Payment' : 'Record Payment'}</h2><button className="btn-ghost" aria-label="Close" onClick={closeModal}><X size={20} /></button></div>
             <form onSubmit={savePayout}>
               <div className="modal-body">
                 <div className="form-grid">
                   <div className="form-field full">
                     <label className="form-label" htmlFor="p-hosp">Hospital</label>
-                    <select id="p-hosp" className="form-select" autoFocus value={payoutForm.hospital_id} onChange={e => setPayoutForm({ ...payoutForm, hospital_id: e.target.value })}>
+                    <select id="p-hosp" className="form-select" autoFocus={!editingPayout} disabled={!!editingPayout} value={payoutForm.hospital_id} onChange={e => setPayoutForm({ ...payoutForm, hospital_id: e.target.value })}>
                       <option value="">Select hospital…</option>
                       {hospitals.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
                     </select>
@@ -887,7 +941,7 @@ function App() {
                 </div>
                 {payoutError && <div className="form-error" role="alert">{payoutError}</div>}
               </div>
-              <div className="modal-footer"><button type="button" className="btn btn-outline" onClick={closeModal}>Cancel</button><button type="submit" className="btn btn-success">Save Payment</button></div>
+              <div className="modal-footer"><button type="button" className="btn btn-outline" onClick={closeModal}>Cancel</button><button type="submit" className="btn btn-success">{editingPayout ? 'Save Changes' : 'Save Payment'}</button></div>
             </form>
           </div>
         </div>
