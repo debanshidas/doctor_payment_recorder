@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { LayoutDashboard, Users, Building2, CreditCard, FileBarChart, ScrollText, LogOut, Shield, Eye, EyeOff, CheckCircle, Clock, Settings, LifeBuoy } from 'lucide-react';
+import { LayoutDashboard, Users, Building2, CreditCard, FileBarChart, ScrollText, LogOut, Shield, Eye, EyeOff, CheckCircle, Clock, Settings, LifeBuoy, Menu, Bell, ChevronDown } from 'lucide-react';
 
 const API = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '') + '/api';
 
@@ -655,6 +655,8 @@ export default function App() {
   });
   const [page, setPage] = useState('dashboard');
   const [queryBadge, setQueryBadge] = useState(0);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
     if (!session) return;
@@ -696,20 +698,24 @@ export default function App() {
   };
 
   const PageComponent = pages[page] || DashboardPage;
+  const initials = (session.name || 'A').split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  const go = (id) => { setPage(id); setSidebarOpen(false); };
 
   return (
     <div className="app-layout">
-      <aside className="sidebar">
+      {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
+      <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
-          <h2><Shield size={20} /> DocTrack Admin</h2>
-          <span>Welcome, {session.name}</span>
+          <h2><Shield size={20} /> DocTrack</h2>
+          <span>Admin Portal</span>
         </div>
         <nav className="sidebar-nav">
           {navSections.map(sec => (
             <div key={sec.title} className="nav-section">
               <div className="nav-section-title">{sec.title}</div>
               {sec.items.map(item => (
-                <div key={item.id} className={`nav-item ${page === item.id ? 'active' : ''}`} onClick={() => setPage(item.id)}>
+                <div key={item.id} className={`nav-item ${page === item.id ? 'active' : ''}`} role="button" tabIndex={0}
+                  onClick={() => go(item.id)} onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && go(item.id)}>
                   <item.icon size={18} /> <span>{item.label}</span>
                   {item.badge > 0 && <span className="nav-badge">{item.badge}</span>}
                 </div>
@@ -721,9 +727,33 @@ export default function App() {
           <button className="logout-btn" onClick={logout}><LogOut size={18} /> Sign Out</button>
         </div>
       </aside>
-      <main className="main-content">
-        <PageComponent key={page} session={session} />
-      </main>
+
+      <div className="app-shell">
+        <header className="topbar">
+          <button className="topbar-menu" aria-label="Menu" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>
+          <div className="topbar-spacer" />
+          <button className="topbar-bell" aria-label={`${queryBadge} queries need attention`} title="Queries needing attention" onClick={() => go('queries')}>
+            <Bell size={18} />
+            {queryBadge > 0 && <span className="topbar-bell-dot">{queryBadge}</span>}
+          </button>
+          <div className="topbar-profile" tabIndex={0} onBlur={() => setTimeout(() => setProfileOpen(false), 150)}>
+            <button className="topbar-profile-btn" onClick={() => setProfileOpen(o => !o)}>
+              <span className="topbar-avatar">{initials}</span>
+              <span className="topbar-profile-meta"><strong>{session.name}</strong><small>Administrator</small></span>
+              <ChevronDown size={16} />
+            </button>
+            {profileOpen && (
+              <div className="topbar-menu-pop">
+                <button onClick={() => { go('settings'); setProfileOpen(false); }}><Settings size={15} /> Settings</button>
+                <button onClick={logout}><LogOut size={15} /> Logout</button>
+              </div>
+            )}
+          </div>
+        </header>
+        <main className="main-content">
+          <PageComponent key={page} session={session} />
+        </main>
+      </div>
     </div>
   );
 }
