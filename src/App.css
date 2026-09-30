@@ -1222,6 +1222,88 @@ button { cursor: pointer; border: none; background: none; }
   .toast { animation: none; }
 }
 
+/* ── Dashboard polish ── */
+
+.stat-top { display: flex; align-items: center; justify-content: space-between; }
+.stat-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+}
+.stat-icon.blue { background: var(--blue-bg); color: var(--blue); }
+.stat-icon.green { background: var(--green-bg); color: var(--green); }
+.stat-icon.amber { background: var(--amber-bg); color: var(--amber); }
+.stat-icon.red { background: var(--red-bg); color: var(--red); }
+.stat-tile { transition: transform 0.15s, box-shadow 0.15s; }
+.stat-tile:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+
+.money-bar {
+  display: flex;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #e2e8f0;
+}
+.money-seg { height: 100%; transition: width 0.8s ease; }
+.money-seg.received { background: var(--gradient-green); }
+.money-seg.review { background: var(--gradient-amber); }
+.money-seg.pending { background: #cbd5e1; }
+.money-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-top: 12px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+.money-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.money-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.money-legend i.received { background: var(--green); }
+.money-legend i.review { background: var(--amber); }
+.money-legend i.pending { background: #cbd5e1; }
+
+.card-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--blue);
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.card-link:hover { background: var(--blue-bg); }
+
+.hospital-list { display: flex; flex-direction: column; gap: 6px; }
+.hospital-row {
+  width: 100%;
+  text-align: left;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s;
+}
+.hospital-row:hover { background: var(--surface-soft); border-color: var(--border); }
+.hospital-row:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.hospital-row-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.hospital-row-name { font-size: 0.875rem; font-weight: 600; color: var(--text); }
+.hospital-row-pct { font-size: 0.75rem; color: var(--muted); }
+.hospital-progress { height: 6px; border-radius: 999px; background: #e2e8f0; overflow: hidden; margin-bottom: 10px; }
+.hospital-progress div { height: 100%; background: var(--gradient-green); border-radius: 999px; transition: width 0.6s ease; }
+.hospital-row-stats {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+.hospital-row-stats b { color: var(--text); font-weight: 600; margin-left: 4px; }
+
+.amount-note { display: block; font-size: 0.6875rem; font-weight: 400; color: var(--muted); }
+.nowrap { white-space: nowrap; }
+
 .dash-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; }
 @media (max-width: 900px) { .dash-grid { grid-template-columns: 1fr; } }
 
