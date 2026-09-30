@@ -29,7 +29,7 @@ export default function Welcome({ onLogin, onSignup }) {
           </div>
           <nav>
             <button className="welcome-link" onClick={onLogin}>Log in</button>
-            <button className="welcome-btn btn-noise" onClick={onSignup}>Get started <ArrowRight size={16} /></button>
+            <ShinyButton className="compact" onClick={onSignup}>Get started <ArrowRight size={16} /></ShinyButton>
           </nav>
         </header>
 

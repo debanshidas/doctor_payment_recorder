@@ -87,6 +87,8 @@
   opacity: 0.6;
 }
 
+.shiny-cta.compact { padding: 9px 18px; font-size: 0.875rem; gap: 6px; }
+
 .shiny-cta span { z-index: 1; display: inline-flex; align-items: center; gap: 8px; }
 
 .shiny-cta span::before {
