@@ -38,8 +38,9 @@ const EMPTY_PAYOUT = () => ({ hospital_id: '', date: today(), actual_net: '', ex
 const PAYOUT_STATUS_OPTIONS = [
   { value: 'Paid', label: 'Fully Paid', hint: 'Dues settled in full', color: 'green' },
   { value: 'Partially Paid', label: 'Partially Paid', hint: 'Part of the dues received', color: 'blue' },
+  { value: 'Under Review', label: 'Under Review', hint: 'Awaiting confirmation', color: 'amber' },
 ]
-const EDITABLE_PAYOUT = ['Paid', 'Partially Paid']
+const EDITABLE_PAYOUT = ['Paid', 'Partially Paid', 'Under Review']
 const statusLabel = (value) => PAYOUT_STATUS_OPTIONS.find(o => o.value === value)?.label || value
 
 const StatusLegend = () => (
@@ -1255,7 +1256,7 @@ function App() {
                   <div className="form-field full"><label className="form-label" htmlFor="p-ref">Reference</label><input id="p-ref" className="form-input" value={payoutForm.transaction_ref} onChange={e => setPayoutForm({ ...payoutForm, transaction_ref: e.target.value })} placeholder="UTR / NEFT / Cheque No." /></div>
                   <div className="form-field full">
                     <span className="form-label">Status</span>
-                    <div className="basis-toggle" role="radiogroup" aria-label="Payment status">
+                    <div className="basis-toggle three" role="radiogroup" aria-label="Payment status">
                       {PAYOUT_STATUS_OPTIONS.map(o => (
                         <button key={o.value} type="button" role="radio" aria-checked={payoutForm.status === o.value} className={payoutForm.status === o.value ? 'active' : ''}
                           onClick={() => setPayoutForm(f => ({ ...f, status: o.value, expected_net: o.value === 'Partially Paid' ? (f.expected_net || String(monthEarnedForHospital(f.hospital_id) || '')) : f.expected_net }))}>
