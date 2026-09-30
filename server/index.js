@@ -370,20 +370,24 @@ app.get('/api/payouts', auth, async (req, res) => {
 });
 
 app.post('/api/payouts', auth, async (req, res) => {
-    const { hospital_id, date, period, actual_net, transaction_ref, notes, status } = req.body;
+    const { hospital_id, date, period, actual_net, expected_net, transaction_ref, notes, status } = req.body;
     if (!hospital_id || !date) return res.status(400).json({ error: 'hospital_id and date are required.' });
     const amount = Number(actual_net);
     if (!(amount > 0)) return res.status(400).json({ error: 'Amount received must be greater than zero.' });
-    const payoutStatus = status || 'Under Review';
+    const total = Math.max(0, Number(expected_net) || 0);
+    // Total payable (expected_net) lets a payment show outstanding/progress; the status is derived from the amounts.
+    let payoutStatus = status || 'Under Review';
     if (!PAYOUT_STATUSES.includes(payoutStatus)) return res.status(400).json({ error: `Status must be one of: ${PAYOUT_STATUSES.join(', ')}.` });
+    if (total > 0 && payoutStatus !== 'Under Review') payoutStatus = amount >= total ? 'Paid' : 'Partially Paid';
     try {
         const hospital = await dbGet('SELECT * FROM hospitals WHERE id = ? AND user_id = ?', [hospital_id, req.userId]);
         if (!hospital) return res.status(404).json({ error: 'Hospital not found.' });
 
+        const shortfall = total > 0 ? Math.max(0, total - amount) : 0;
         const result = await dbRun(
-            `INSERT INTO payouts (user_id, hospital_id, date, period, actual_net, transaction_ref, notes, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [req.userId, hospital_id, date, period || null, amount, transaction_ref || null, notes || null, payoutStatus]
+            `INSERT INTO payouts (user_id, hospital_id, date, period, actual_net, expected_net, shortfall, transaction_ref, notes, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [req.userId, hospital_id, date, period || null, amount, total, shortfall, transaction_ref || null, notes || null, payoutStatus]
         );
         const payout = await dbGet(
             `SELECT py.*, h.name as hospital_name FROM payouts py JOIN hospitals h ON py.hospital_id = h.id WHERE py.id = ?`,
@@ -396,21 +400,36 @@ app.post('/api/payouts', auth, async (req, res) => {
 });
 
 app.put('/api/payouts/:id', auth, async (req, res) => {
-    const fields = ['status', 'actual_net', 'transaction_ref', 'notes', 'date', 'period'];
+    // status, expected_net and shortfall are derived below; the rest are copied through.
+    const fields = ['actual_net', 'transaction_ref', 'notes', 'date', 'period'];
     if (req.body.status !== undefined && !PAYOUT_STATUSES.includes(req.body.status)) {
         return res.status(400).json({ error: `Status must be one of: ${PAYOUT_STATUSES.join(', ')}.` });
     }
-    const sets = [];
-    const params = [];
-    for (const f of fields) {
-        if (req.body[f] !== undefined) {
-            sets.push(`${f} = ?`);
-            params.push(req.body[f]);
-        }
-    }
-    if (sets.length === 0) return res.status(400).json({ error: 'Nothing to update.' });
-    params.push(req.params.id, req.userId);
     try {
+        const existing = await dbGet('SELECT * FROM payouts WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
+        if (!existing) return res.status(404).json({ error: 'Payout not found.' });
+
+        const sets = [];
+        const params = [];
+        for (const f of fields) {
+            if (req.body[f] !== undefined) {
+                sets.push(`${f} = ?`);
+                params.push(req.body[f]);
+            }
+        }
+
+        const total = req.body.expected_net !== undefined ? Math.max(0, Number(req.body.expected_net) || 0) : existing.expected_net;
+        const received = req.body.actual_net !== undefined ? Number(req.body.actual_net) || 0 : existing.actual_net;
+        // Effective status is derived from the amounts so a record can never be Paid with money outstanding.
+        let effStatus = req.body.status !== undefined ? req.body.status : existing.status;
+        if (total > 0 && effStatus !== 'Under Review' && effStatus !== 'Rejected') {
+            effStatus = received >= total ? 'Paid' : 'Partially Paid';
+        }
+        if (req.body.expected_net !== undefined) { sets.push('expected_net = ?'); params.push(total); }
+        sets.push('status = ?'); params.push(effStatus);
+        sets.push('shortfall = ?'); params.push(total > 0 ? Math.max(0, total - received) : 0);
+
+        params.push(req.params.id, req.userId);
         const r = await dbRun(`UPDATE payouts SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`, params);
         if (r.changes === 0) return res.status(404).json({ error: 'Payout not found.' });
         const payout = await dbGet(

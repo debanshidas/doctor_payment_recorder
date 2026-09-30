@@ -13,7 +13,10 @@ const formatMoney = (v) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Number(v || 0))
 
 const formatPct = (v) => `${Number(v || 0).toFixed(1)}%`
-const today = () => new Date().toISOString().split('T')[0]
+const today = () => {
+  const n = new Date()
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
+}
 const formatDate = (iso) => {
   if (!iso) return '—'
   const d = new Date(`${iso}T00:00:00`)
@@ -31,7 +34,7 @@ const GrossCell = ({ p }) => (
 )
 
 const EMPTY_HOSPITAL = { name: '', location: 'Bangalore', payout_basis: 'share', payout_percentage: '80', fixed_fee: '0', tds_rate: '10', deduction_rate: '2', settlement_cycle: '30 days', finance_contact_name: '', finance_contact_email: '', finance_contact_phone: '' }
-const EMPTY_PAYOUT = () => ({ hospital_id: '', date: today(), actual_net: '', transaction_ref: '', notes: '', status: 'Paid' })
+const EMPTY_PAYOUT = () => ({ hospital_id: '', date: today(), actual_net: '', expected_net: '', transaction_ref: '', notes: '', status: 'Paid' })
 const PAYOUT_STATUS_OPTIONS = [
   { value: 'Paid', label: 'Fully Paid', hint: 'Dues settled in full', color: 'green' },
   { value: 'Partially Paid', label: 'Partially Paid', hint: 'Part of the dues received', color: 'blue' },
@@ -184,6 +187,7 @@ function App() {
   const [ledgerService, setLedgerService] = useState('All')
   const [ledgerDate, setLedgerDate] = useState('all')
   const [ledgerRange, setLedgerRange] = useState({ from: '', to: '' })
+  const [ledgerPeriod, setLedgerPeriod] = useState('week')
   const [expandedRow, setExpandedRow] = useState(null)
 
   const load = useCallback(async () => {
@@ -289,7 +293,7 @@ function App() {
   }
 
   const openEditPayout = (py) => {
-    setPayoutForm({ hospital_id: String(py.hospital_id), date: py.date, actual_net: String(py.actual_net), transaction_ref: py.transaction_ref || '', notes: py.notes || '', status: py.status })
+    setPayoutForm({ hospital_id: String(py.hospital_id), date: py.date, actual_net: String(py.actual_net), expected_net: py.expected_net ? String(py.expected_net) : '', transaction_ref: py.transaction_ref || '', notes: py.notes || '', status: py.status })
     setEditingPayout(py.id)
     setPayoutError('')
     setShowModal('payout')
@@ -450,11 +454,12 @@ function App() {
     if (!payoutForm.hospital_id) return setPayoutError('Select a hospital.')
     if (!(Number(payoutForm.actual_net) > 0)) return setPayoutError('Enter the amount received.')
     try {
+      const totalPayable = payoutForm.status === 'Partially Paid' ? (Number(payoutForm.expected_net) || 0) : 0
       if (editingPayout) {
-        await api(`/payouts/${editingPayout}`, { method: 'PUT', body: JSON.stringify({ date: payoutForm.date, actual_net: Number(payoutForm.actual_net), transaction_ref: payoutForm.transaction_ref, notes: payoutForm.notes, status: payoutForm.status }) })
+        await api(`/payouts/${editingPayout}`, { method: 'PUT', body: JSON.stringify({ date: payoutForm.date, actual_net: Number(payoutForm.actual_net), expected_net: totalPayable, transaction_ref: payoutForm.transaction_ref, notes: payoutForm.notes, status: payoutForm.status }) })
         setToast('Payment updated')
       } else {
-        await api('/payouts', { method: 'POST', body: JSON.stringify({ ...payoutForm, hospital_id: Number(payoutForm.hospital_id), actual_net: Number(payoutForm.actual_net) }) })
+        await api('/payouts', { method: 'POST', body: JSON.stringify({ ...payoutForm, hospital_id: Number(payoutForm.hospital_id), actual_net: Number(payoutForm.actual_net), expected_net: totalPayable }) })
         setToast(payoutForm.status === 'Under Review' ? 'Payment recorded — under review' : 'Payment recorded')
       }
       setShowModal(null)
@@ -536,7 +541,7 @@ function App() {
 
         {analytics && (<>
           <div className="card mb-6">
-            <div className="card-header"><h3>Payments by Hospital</h3><span className="text-xs text-muted">Earned, split into received · under review · pending</span></div>
+            <div className="card-header"><h3>Payments by Hospital</h3><button className="card-link" onClick={openAddHospital}><Plus size={14} /> Add Hospital</button></div>
             <div className="card-body"><SettlementBars rows={analytics.revenueByHospital.filter(h => h.earned > 0)} /></div>
           </div>
 
@@ -594,7 +599,7 @@ function App() {
       const now = new Date(); now.setHours(0, 0, 0, 0)
       if (ledgerDate === 'today') return dateStr === today()
       if (ledgerDate === 'week') { const s = new Date(now); s.setDate(now.getDate() - ((now.getDay() + 6) % 7)); return d >= s && d <= now }
-      if (ledgerDate === 'month') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+      if (ledgerDate === 'month') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d <= now
       if (ledgerDate === 'custom') { const f = ledgerRange.from, t = ledgerRange.to; return (!f || dateStr >= f) && (!t || dateStr <= t) }
       return true
     }
@@ -606,6 +611,26 @@ function App() {
     const dateLabel = { all: 'All dates', today: 'Today', week: 'This week', month: 'This month', custom: 'Custom range' }
     const active = ledgerHospital !== 'All' || ledgerService !== 'All' || ledgerDate !== 'all'
     const clearFilters = () => { setLedgerHospital('All'); setLedgerService('All'); setLedgerDate('all'); setLedgerRange({ from: '', to: '' }) }
+
+    // Weekly / monthly summary — computed from entries (earned) and payments (received / under review) by date.
+    const inPeriod = (dateStr) => {
+      const d = new Date(`${dateStr}T00:00:00`)
+      const now = new Date(); now.setHours(0, 0, 0, 0)
+      if (ledgerPeriod === 'week') { const s = new Date(now); s.setDate(now.getDate() - ((now.getDay() + 6) % 7)); return d >= s && d <= now }
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d <= now
+    }
+    const hospMatch = (hid) => ledgerHospital === 'All' || hid === Number(ledgerHospital)
+    // Period activity (raw sums for the selected week/month).
+    const periodEarned = procedures.filter(p => hospMatch(p.hospital_id) && inPeriod(p.date)).reduce((s, p) => s + p.net_expected, 0)
+    const periodPays = payouts.filter(py => hospMatch(py.hospital_id) && inPeriod(py.date))
+    const periodReceived = periodPays.filter(py => py.status === 'Paid' || py.status === 'Partially Paid').reduce((s, py) => s + py.actual_net, 0)
+    const periodReview = periodPays.filter(py => py.status === 'Under Review').reduce((s, py) => s + py.actual_net, 0)
+    // Outstanding is a to-date figure (payments aren't tied to an entry's period), so it stays consistent with the dashboard.
+    const allEarned = procedures.filter(p => hospMatch(p.hospital_id)).reduce((s, p) => s + p.net_expected, 0)
+    const allPays = payouts.filter(py => hospMatch(py.hospital_id))
+    const allReceived = allPays.filter(py => py.status === 'Paid' || py.status === 'Partially Paid').reduce((s, py) => s + py.actual_net, 0)
+    const allReview = allPays.filter(py => py.status === 'Under Review').reduce((s, py) => s + py.actual_net, 0)
+    const outstanding = Math.max(0, allEarned - allReceived - allReview)
 
     return (
       <div className="animate-in">
@@ -684,6 +709,22 @@ function App() {
           </>))}
           {list.length === 0 && <tr><td colSpan={8} className="text-center text-muted" style={{ padding: '32px' }}>{procedures.length === 0 ? 'No entries yet' : 'No entries match these filters'}</td></tr>}
         </tbody></table></div></div></div>
+
+        <div className="ledger-summary">
+          <div className="ledger-summary-head">
+            <span>{ledgerPeriod === 'week' ? 'This Week' : 'This Month'}{ledgerHospital !== 'All' ? ` · ${hospitals.find(h => h.id === Number(ledgerHospital))?.name}` : ''}</span>
+            <div className="period-toggle" role="radiogroup" aria-label="Summary period">
+              <button type="button" role="radio" aria-checked={ledgerPeriod === 'week'} className={ledgerPeriod === 'week' ? 'active' : ''} onClick={() => setLedgerPeriod('week')}>Weekly</button>
+              <button type="button" role="radio" aria-checked={ledgerPeriod === 'month'} className={ledgerPeriod === 'month' ? 'active' : ''} onClick={() => setLedgerPeriod('month')}>Monthly</button>
+            </div>
+          </div>
+          <div className="ledger-summary-grid">
+            <div><span className="ls-label">Earned</span><span className="ls-val">{formatMoney(periodEarned)}</span></div>
+            <div><span className="ls-label">Received</span><span className="ls-val text-green">{formatMoney(periodReceived)}</span></div>
+            <div><span className="ls-label">Under Review</span><span className="ls-val text-amber">{formatMoney(periodReview)}</span></div>
+            <div><span className="ls-label">Outstanding · to date</span><span className="ls-val">{formatMoney(outstanding)}</span></div>
+          </div>
+        </div>
       </div>
     )
   }
@@ -796,7 +837,19 @@ function App() {
           {payouts.map(py => (
             <tr key={py.id} className={`status-row ${payoutBadge(py.status)}`}>
               <td className="nowrap">{formatDate(py.date)}</td><td className="font-semibold">{py.hospital_name}</td><td>{py.transaction_ref || '—'}</td>
-              <td className="amount">{formatMoney(py.actual_net)}</td>
+              <td className="amount">
+                {formatMoney(py.actual_net)}
+                {py.expected_net > 0 && (() => {
+                  const pct = Math.min(100, (py.actual_net / py.expected_net) * 100)
+                  const out = Math.max(0, py.expected_net - py.actual_net)
+                  return (
+                    <div className="pay-bar" title={`${formatMoney(py.actual_net)} of ${formatMoney(py.expected_net)}`}>
+                      <div className="pay-bar-track"><div style={{ width: `${pct}%` }} /></div>
+                      <span>{out > 0 ? `${formatMoney(out)} left` : 'settled'}</span>
+                    </div>
+                  )
+                })()}
+              </td>
               <td><PayoutStatus p={py} onChange={requestStatusChange} /></td>
               <td><button className="btn-ghost btn-sm" aria-label="Edit payment" title="Edit" disabled={py.status === 'Rejected'} onClick={() => openEditPayout(py)}><Pencil size={14} /></button></td>
             </tr>
@@ -1062,7 +1115,25 @@ function App() {
                       ))}
                     </div>
                   </div>
+                  {payoutForm.status === 'Partially Paid' && (
+                    <div className="form-field full">
+                      <label className="form-label" htmlFor="p-total">Total Payable (₹)</label>
+                      <input id="p-total" className="form-input" type="number" min="0" inputMode="numeric" value={payoutForm.expected_net} onChange={e => setPayoutForm({ ...payoutForm, expected_net: e.target.value })} placeholder="e.g. 50000" />
+                    </div>
+                  )}
                 </div>
+                {payoutForm.status === 'Partially Paid' && Number(payoutForm.expected_net) > 0 && (() => {
+                  const total = Number(payoutForm.expected_net), paid = Number(payoutForm.actual_net) || 0
+                  const pct = Math.min(100, (paid / total) * 100)
+                  const out = Math.max(0, total - paid)
+                  return (
+                    <div className="pay-progress">
+                      <div className="pay-progress-row"><span>Received {formatMoney(paid)} of {formatMoney(total)}</span><strong>{out > 0 ? `${formatMoney(out)} outstanding` : 'Fully received'}</strong></div>
+                      <div className="pay-progress-track"><div style={{ width: `${pct}%` }} /></div>
+                      <span className="pay-progress-pct">{Math.round(pct)}% paid{paid >= total ? ' · will be marked Fully Paid' : ''}</span>
+                    </div>
+                  )
+                })()}
                 {payoutError && <div className="form-error" role="alert">{payoutError}</div>}
               </div>
               <div className="modal-footer"><button type="button" className="btn btn-outline" onClick={closeModal}>Cancel</button><button type="submit" className="btn btn-success">{editingPayout ? 'Save Changes' : 'Save Payment'}</button></div>
