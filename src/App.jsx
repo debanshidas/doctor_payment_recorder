@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Eye, EyeOff, LayoutDashboard, Building2, FileText, IndianRupee, AlertTriangle, LogOut, Menu, X, Plus, User, ChevronDown, ChevronRight, Receipt, CheckCircle2, ArrowLeft, ArrowRight, Trash2, Pencil } from 'lucide-react'
 import Welcome from './Welcome.jsx'
+import ShinyButton from './ShinyButton.jsx'
 import { SettlementBars, MetricBars, Donut, LineChart, ChartEmpty, STATUS_COLOR } from './Charts.jsx'
 import './App.css'
 
@@ -1088,7 +1089,7 @@ function App() {
                 <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} /> Remember me
               </label>
               {loginError && <div className="login-error" role="alert">{loginError}</div>}
-              <button type="submit" className="btn btn-primary btn-noise w-full" style={{ justifyContent: 'center', padding: '12px' }}>Login</button>
+              <ShinyButton type="submit" className="block">Login</ShinyButton>
             </form>
             <div className="login-switch"><button onClick={() => { setAuthView('signup'); setSignupError('') }}>Don't have an account? Create one</button></div>
           </>)}
@@ -1106,7 +1107,7 @@ function App() {
               <div className="login-field"><label htmlFor="su-pw">Password</label><input id="su-pw" className="form-input dark" type="password" value={signupForm.password || ''} onChange={e => setSignupForm({ ...signupForm, password: e.target.value })} placeholder="Min 6 characters" /></div>
               <div className="login-field"><label htmlFor="su-pw2">Confirm Password</label><input id="su-pw2" className="form-input dark" type="password" value={signupForm.confirmPassword || ''} onChange={e => setSignupForm({ ...signupForm, confirmPassword: e.target.value })} placeholder="Confirm password" /></div>
               {signupError && <div className="login-error" role="alert">{signupError}</div>}
-              <button type="submit" className="btn btn-primary btn-noise w-full" style={{ justifyContent: 'center', padding: '12px' }}>Create Account</button>
+              <ShinyButton type="submit" className="block">Create Account</ShinyButton>
             </form>
             <div className="login-switch"><button onClick={() => { setAuthView('login'); setLoginError('') }}>Already have an account? Log in</button></div>
           </>)}
@@ -1116,7 +1117,7 @@ function App() {
               <CheckCircle2 size={48} className="text-green" style={{ margin: '0 auto 16px' }} />
               <h2 style={{ color: '#f8fafc', marginBottom: 8 }}>Account Created</h2>
               <p className="text-muted mb-6">You can now log in with your credentials.</p>
-              <button className="btn btn-primary btn-noise w-full" style={{ justifyContent: 'center' }} onClick={() => { setAuthView('login'); setSignupForm({}) }}>Go to Login</button>
+              <ShinyButton className="block" onClick={() => { setAuthView('login'); setSignupForm({}) }}>Go to Login</ShinyButton>
             </div>
           )}
         </div>

@@ -88,6 +88,7 @@
 }
 
 .shiny-cta.compact { padding: 9px 18px; font-size: 0.875rem; gap: 6px; }
+.shiny-cta.block { width: 100%; justify-content: center; }
 
 .shiny-cta span { z-index: 1; display: inline-flex; align-items: center; gap: 8px; }
 
