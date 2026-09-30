@@ -15,6 +15,8 @@ function hashPassword(password) {
     return crypto.createHash('sha256').update(password).digest('hex');
 }
 
+const PAYOUT_STATUSES = ['Paid', 'Partially Paid', 'Under Review'];
+
 // amountPerCase is billed per case; the doctor's share is either a % of gross or a fixed fee per case.
 function calcWaterfall(hospital, amountPerCase, cases) {
     const n = Math.max(1, Number(cases) || 1);
@@ -346,18 +348,20 @@ app.get('/api/payouts', auth, async (req, res) => {
 });
 
 app.post('/api/payouts', auth, async (req, res) => {
-    const { hospital_id, date, period, actual_net, transaction_ref, notes } = req.body;
+    const { hospital_id, date, period, actual_net, transaction_ref, notes, status } = req.body;
     if (!hospital_id || !date) return res.status(400).json({ error: 'hospital_id and date are required.' });
     const amount = Number(actual_net);
     if (!(amount > 0)) return res.status(400).json({ error: 'Amount received must be greater than zero.' });
+    const payoutStatus = status || 'Under Review';
+    if (!PAYOUT_STATUSES.includes(payoutStatus)) return res.status(400).json({ error: `Status must be one of: ${PAYOUT_STATUSES.join(', ')}.` });
     try {
         const hospital = await dbGet('SELECT * FROM hospitals WHERE id = ? AND user_id = ?', [hospital_id, req.userId]);
         if (!hospital) return res.status(404).json({ error: 'Hospital not found.' });
 
         const result = await dbRun(
             `INSERT INTO payouts (user_id, hospital_id, date, period, actual_net, transaction_ref, notes, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 'Under Review')`,
-            [req.userId, hospital_id, date, period || null, amount, transaction_ref || null, notes || null]
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [req.userId, hospital_id, date, period || null, amount, transaction_ref || null, notes || null, payoutStatus]
         );
         const payout = await dbGet(
             `SELECT py.*, h.name as hospital_name FROM payouts py JOIN hospitals h ON py.hospital_id = h.id WHERE py.id = ?`,
@@ -470,7 +474,7 @@ async function moneySummary(userId, hospitalId = null) {
     const params = hospitalId ? [userId, hospitalId] : [userId];
     const e = await dbGet(`SELECT COALESCE(SUM(net_expected), 0) as earned FROM procedures WHERE user_id = ? ${scope}`, params);
     const p = await dbGet(
-        `SELECT COALESCE(SUM(CASE WHEN status = 'Paid' THEN actual_net END), 0) as received,
+        `SELECT COALESCE(SUM(CASE WHEN status IN ('Paid', 'Partially Paid') THEN actual_net END), 0) as received,
                 COALESCE(SUM(CASE WHEN status = 'Under Review' THEN actual_net END), 0) as underReview,
                 SUM(CASE WHEN status = 'Under Review' THEN 1 ELSE 0 END) as underReviewCount
          FROM payouts WHERE user_id = ? ${scope}`, params);
@@ -525,7 +529,7 @@ app.get('/api/admin/dashboard', adminAuth, async (req, res) => {
         const hospitalCount = await dbGet('SELECT COUNT(*) as count FROM hospitals');
         const procedureCount = await dbGet('SELECT COUNT(*) as count FROM procedures');
         const totalRevenue = await dbGet('SELECT COALESCE(SUM(gross_amount), 0) as total FROM procedures');
-        const totalPaid = await dbGet("SELECT COALESCE(SUM(actual_net), 0) as total FROM payouts WHERE status = 'Paid'");
+        const totalPaid = await dbGet("SELECT COALESCE(SUM(actual_net), 0) as total FROM payouts WHERE status IN ('Paid', 'Partially Paid')");
         const pendingPayouts = await dbGet("SELECT COUNT(*) as count FROM payouts WHERE status IN ('Pending', 'Under Review')");
         const recentUsers = await dbAll('SELECT id, username, email, name, role, status, created_at, last_login FROM users ORDER BY created_at DESC LIMIT 5');
         const recentPayouts = await dbAll(`

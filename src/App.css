@@ -1083,6 +1083,9 @@ button { cursor: pointer; border: none; background: none; }
   font-weight: 400;
   color: var(--muted);
 }
+.basis-toggle.three { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 480px) { .basis-toggle.three { grid-template-columns: 1fr; } }
+.basis-toggle button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .basis-toggle button.active {
   border-color: var(--blue);
   background: var(--blue-bg);

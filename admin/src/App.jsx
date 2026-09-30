@@ -25,7 +25,7 @@ function formatCurrency(n) {
 
 function StatusBadge({ status }) {
   const cls = {
-    active: 'badge-active', inactive: 'badge-inactive', Paid: 'badge-paid',
+    active: 'badge-active', inactive: 'badge-inactive', Paid: 'badge-paid', 'Partially Paid': 'badge-doctor',
     Rejected: 'badge-rejected', Pending: 'badge-pending', 'Under Review': 'badge-under-review',
     admin: 'badge-admin', doctor: 'badge-doctor'
   };
@@ -267,7 +267,7 @@ function PaymentsPage() {
     } catch {}
   }
 
-  const filters = ['All', 'Pending', 'Under Review', 'Paid', 'Rejected'];
+  const filters = ['All', 'Under Review', 'Paid', 'Partially Paid', 'Rejected'];
   const filtered = filter === 'All' ? payments : payments.filter(p => p.status === filter);
 
   if (loading) return <div className="loading">Loading payments...</div>;
@@ -292,7 +292,7 @@ function PaymentsPage() {
                 <td>{formatCurrency(p.actual_net)}</td><td>{p.transaction_ref || '—'}</td>
                 <td><StatusBadge status={p.status} />{p.status === 'Rejected' && p.notes && <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{p.notes}</div>}</td>
                 <td>
-                  {(p.status === 'Pending' || p.status === 'Under Review') && (
+                  {p.status === 'Under Review' && (
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button className="btn-sm btn-approve" onClick={() => approvePayment(p.id)}>Approve</button>
                       <button className="btn-sm btn-reject" onClick={() => { setRejectModal(p.id); setRejectReason(''); }}>Reject</button>

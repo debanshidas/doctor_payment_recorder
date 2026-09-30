@@ -23,7 +23,12 @@ const GrossCell = ({ p }) => (
 )
 
 const EMPTY_HOSPITAL = { name: '', location: 'Bangalore', payout_basis: 'share', payout_percentage: '80', fixed_fee: '0', tds_rate: '10', deduction_rate: '2', settlement_cycle: '30 days', finance_contact_name: '', finance_contact_email: '', finance_contact_phone: '' }
-const EMPTY_PAYOUT = () => ({ hospital_id: '', date: today(), actual_net: '', transaction_ref: '', notes: '' })
+const EMPTY_PAYOUT = () => ({ hospital_id: '', date: today(), actual_net: '', transaction_ref: '', notes: '', status: 'Paid' })
+const PAYOUT_STATUS_OPTIONS = [
+  { value: 'Paid', label: 'Fully Paid', hint: 'Dues settled in full' },
+  { value: 'Partially Paid', label: 'Partially Paid', hint: 'Part of the dues received' },
+  { value: 'Under Review', label: 'Under Review', hint: 'Needs admin verification' },
+]
 const SERVICE_SUGGESTIONS = ['Consultation', 'Follow-up', 'Surgery', 'Procedure', 'Ward Round', 'Emergency Call']
 const MANUAL = 'manual'
 
@@ -31,7 +36,7 @@ const describeRule = (h) => h.payout_basis === 'fixed'
   ? `${formatMoney(h.fixed_fee)} fixed per case`
   : `${h.payout_percentage}% revenue share`
 
-const payoutBadge = (status) => status === 'Paid' ? 'green' : status === 'Rejected' ? 'red' : 'amber'
+const payoutBadge = (status) => status === 'Paid' ? 'green' : status === 'Partially Paid' ? 'blue' : status === 'Rejected' ? 'red' : 'amber'
 
 // Mirrors the server's calcWaterfall so the entry form can preview the net figure.
 const previewNet = (h, amount, cases) => {
@@ -353,7 +358,7 @@ function App() {
       setShowModal(null)
       setPayoutForm(EMPTY_PAYOUT())
       setPayoutError('')
-      setToast('Payment recorded — under review')
+      setToast(payoutForm.status === 'Under Review' ? 'Payment recorded — under review' : 'Payment recorded')
       load()
     } catch (err) { setPayoutError(err.message) }
   }
@@ -598,7 +603,7 @@ function App() {
         <div className="card"><div className="empty-state">
           <Receipt size={56} className="empty-state-icon" />
           <h3>No payments recorded</h3>
-          <p>Record a payment when a hospital settles your dues. It stays “Under Review” until verified.</p>
+          <p>Record a payment when a hospital settles your dues — fully, partially, or pending verification.</p>
         </div></div>
       ) : (
         <div className="card"><div className="card-body compact"><div className="table-wrap"><table className="data-table"><thead><tr>
@@ -874,8 +879,17 @@ function App() {
                   <div className="form-field"><label className="form-label" htmlFor="p-amt">Amount Received (₹)</label><input id="p-amt" className="form-input" type="number" min="0" inputMode="numeric" value={payoutForm.actual_net} onChange={e => setPayoutForm({ ...payoutForm, actual_net: e.target.value })} /></div>
                   <div className="form-field"><label className="form-label" htmlFor="p-date">Payment Date</label><input id="p-date" className="form-input" type="date" value={payoutForm.date} onChange={e => setPayoutForm({ ...payoutForm, date: e.target.value })} /></div>
                   <div className="form-field full"><label className="form-label" htmlFor="p-ref">Reference</label><input id="p-ref" className="form-input" value={payoutForm.transaction_ref} onChange={e => setPayoutForm({ ...payoutForm, transaction_ref: e.target.value })} placeholder="UTR / NEFT / Cheque No." /></div>
+                  <div className="form-field full">
+                    <span className="form-label">Status</span>
+                    <div className="basis-toggle three" role="radiogroup" aria-label="Payment status">
+                      {PAYOUT_STATUS_OPTIONS.map(o => (
+                        <button key={o.value} type="button" role="radio" aria-checked={payoutForm.status === o.value} className={payoutForm.status === o.value ? 'active' : ''} onClick={() => setPayoutForm({ ...payoutForm, status: o.value })}>
+                          {o.label}<small>{o.hint}</small>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-                <div className="entry-summary" style={{ marginTop: 12 }}><span>Status after saving</span><span className="badge amber">Under Review</span></div>
                 {payoutError && <div className="form-error" role="alert">{payoutError}</div>}
               </div>
               <div className="modal-footer"><button type="button" className="btn btn-outline" onClick={closeModal}>Cancel</button><button type="submit" className="btn btn-success">Save Payment</button></div>
