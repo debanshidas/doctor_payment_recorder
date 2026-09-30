@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@500;600&display=swap');
+
 /* ═══════════════════════════════════════════
    DocTrack — Revenue Reconciliation Design
    ═══════════════════════════════════════════ */
@@ -1221,6 +1223,83 @@ button { cursor: pointer; border: none; background: none; }
   .btn-noise::before { animation: none; }
   .toast { animation: none; }
 }
+
+/* ── Dashboard cards (feature-card style, Poppins scoped here) ── */
+
+.dash-intro {
+  text-align: center;
+  max-width: 640px;
+  margin: 8px auto 40px;
+  font-family: 'Poppins', 'Inter', -apple-system, sans-serif;
+}
+.dash-intro h1 { margin: 0; font-size: 1.875rem; font-weight: 600; letter-spacing: -0.02em; color: var(--text); }
+.dash-intro p { margin: 8px 0 20px; font-size: 0.875rem; color: var(--text-secondary); }
+
+.dash-cards {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 32px 40px;
+  margin-bottom: 40px;
+  font-family: 'Poppins', 'Inter', -apple-system, sans-serif;
+}
+.dash-card {
+  flex: 1 1 240px;
+  max-width: 320px;
+  transition: transform 0.3s;
+}
+.dash-card:hover { transform: translateY(-2px); }
+.dash-card h3 { margin: 16px 0 4px; font-size: 1rem; font-weight: 600; color: #334155; }
+.dash-card p { margin: 0; font-size: 0.875rem; line-height: 1.55; color: #475569; }
+
+.dash-art {
+  position: relative;
+  height: 150px;
+  border-radius: 12px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 8px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  font-family: 'Inter', -apple-system, sans-serif;
+}
+.dash-art::after {
+  content: '';
+  position: absolute;
+  right: -30px;
+  top: -30px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+}
+.dash-art.blue { background: linear-gradient(135deg, #eff6ff, #dbeafe); color: #1d4ed8; }
+.dash-art.green { background: linear-gradient(135deg, #ecfdf5, #d1fae5); color: #047857; }
+.dash-art.amber { background: linear-gradient(135deg, #fffbeb, #fef3c7); color: #b45309; }
+.dash-art.red { background: linear-gradient(135deg, #fef2f2, #fee2e2); color: #b91c1c; }
+.dash-art-icon {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.7);
+}
+.dash-art-amount { font-size: 1.625rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+.dash-art-bar { height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.7); overflow: hidden; }
+.dash-art-bar div { height: 100%; border-radius: 999px; background: currentColor; transition: width 0.8s ease; }
+.dash-art-note { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.8; }
+
+@media (max-width: 1024px) { .dash-cards { gap: 24px; } }
+@media (max-width: 640px) { .dash-card { max-width: 100%; } .dash-intro h1 { font-size: 1.5rem; } }
 
 /* ── Dashboard polish ── */
 

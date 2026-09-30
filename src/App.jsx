@@ -43,22 +43,31 @@ const previewNet = (h, amount, cases) => {
   return { gross, share, net }
 }
 
-const MoneyTiles = ({ m, subs = {} }) => (
-  <div className="stats-grid">
-    {[
-      { key: 'earned', label: 'Earned', color: 'blue', icon: TrendingUp, sub: subs.earned || 'Net expected from entries' },
-      { key: 'received', label: 'Received', color: 'green', icon: CheckCircle2, sub: subs.received || 'Verified payments' },
-      { key: 'underReview', label: 'Under Review', color: 'amber', icon: Clock, sub: subs.underReview || 'Awaiting verification' },
-      { key: 'pending', label: 'Pending', color: 'red', icon: Hourglass, sub: subs.pending || 'Not yet paid' },
-    ].map(t => (
-      <div key={t.key} className={`stat-tile ${t.color}`}>
-        <div className="stat-top"><span className="stat-label">{t.label}</span><span className={`stat-icon ${t.color}`}><t.icon size={16} /></span></div>
-        <span className={`stat-value ${t.color === 'green' || t.color === 'amber' ? t.color : ''}`}>{formatMoney(m[t.key])}</span>
-        <span className="stat-sub">{t.sub}</span>
-      </div>
-    ))}
-  </div>
-)
+const MoneyTiles = ({ m, subs = {} }) => {
+  const share = (v) => m.earned > 0 ? Math.min(100, (v / m.earned) * 100) : 0
+  const cards = [
+    { key: 'earned', label: 'Earned', color: 'blue', icon: TrendingUp, sub: subs.earned || 'Net expected from your entries, after TDS and deductions.', pct: m.earned > 0 ? 100 : 0, note: 'of earned' },
+    { key: 'received', label: 'Received', color: 'green', icon: CheckCircle2, sub: subs.received || 'Payments verified and credited to you.', pct: share(m.received), note: 'collected' },
+    { key: 'underReview', label: 'Under Review', color: 'amber', icon: Clock, sub: subs.underReview || 'Payments you recorded that are awaiting verification.', pct: share(m.underReview), note: 'in review' },
+    { key: 'pending', label: 'Pending', color: 'red', icon: Hourglass, sub: subs.pending || 'Earned but not yet paid by hospitals.', pct: share(m.pending), note: 'outstanding' },
+  ]
+  return (
+    <div className="dash-cards">
+      {cards.map(c => (
+        <article key={c.key} className="dash-card">
+          <div className={`dash-art ${c.color}`}>
+            <span className="dash-art-icon"><c.icon size={18} /></span>
+            <span className="dash-art-amount">{formatMoney(m[c.key])}</span>
+            <div className="dash-art-bar"><div style={{ width: `${c.pct}%` }} /></div>
+            <span className="dash-art-note">{formatPct(c.pct)} {c.note}</span>
+          </div>
+          <h3>{c.label}</h3>
+          <p>{c.sub}</p>
+        </article>
+      ))}
+    </div>
+  )
+}
 
 const MoneyBar = ({ m, rate }) => {
   const total = m.earned || 0
@@ -388,19 +397,17 @@ function App() {
     const reviewCount = payouts.filter(p => p.status === 'Under Review').length
     return (
       <div className="animate-in">
-        <div className="page-header">
-          <div>
-            <h1>{greeting}, {session.user?.name?.split(' ')[0]}</h1>
-            <p className="page-subtitle">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })} · {d.procedureCount} entries across {d.hospitalCount} hospital{d.hospitalCount === 1 ? '' : 's'}</p>
-          </div>
+        <div className="dash-intro">
+          <h1>{greeting}, {session.user?.name?.split(' ')[0]}</h1>
+          <p>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })} · {d.procedureCount} {d.procedureCount === 1 ? 'entry' : 'entries'} across {d.hospitalCount} hospital{d.hospitalCount === 1 ? '' : 's'}</p>
           <button className="btn btn-primary" onClick={openEntry}><Plus size={16} /> Add Entry</button>
         </div>
 
         <MoneyTiles m={d} subs={{
-          earned: `From ${d.procedureCount} ${d.procedureCount === 1 ? 'entry' : 'entries'}`,
-          received: `${paidCount} verified payment${paidCount === 1 ? '' : 's'}`,
-          underReview: reviewCount ? `${reviewCount} awaiting verification` : 'Nothing awaiting verification',
-          pending: d.pending > 0 ? 'Not yet paid by hospitals' : 'All settled',
+          earned: `Net expected from ${d.procedureCount} ${d.procedureCount === 1 ? 'entry' : 'entries'}, after TDS and deductions.`,
+          received: `${paidCount} verified payment${paidCount === 1 ? '' : 's'} credited to you.`,
+          underReview: reviewCount ? `${reviewCount} payment${reviewCount === 1 ? '' : 's'} recorded and awaiting verification.` : 'No payments awaiting verification right now.',
+          pending: d.pending > 0 ? 'Earned but not yet paid by hospitals.' : 'Everything earned has been settled.',
         }} />
 
         <MoneyBar m={d} rate={d.collectionRate} />
