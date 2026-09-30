@@ -4,7 +4,7 @@ import Welcome from './Welcome.jsx'
 import ShinyButton from './ShinyButton.jsx'
 import InteractiveHoverButton from './InteractiveHoverButton.jsx'
 import MeshGradient from './MeshGradient.jsx'
-import { SettlementBars, MetricBars, Donut, LineChart, ChartEmpty, STATUS_COLOR } from './Charts.jsx'
+import { SettlementBars, MetricBars, LineChart, ChartEmpty } from './Charts.jsx'
 import './App.css'
 
 const API = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '') + '/api'
@@ -542,13 +542,10 @@ function App() {
 
           <div className="analytics-head"><h2>Analytics</h2><span className="text-sm text-muted">{analytics.totals.rendered} services rendered · {analytics.totals.entries} {analytics.totals.entries === 1 ? 'visit' : 'visits'} · {analytics.totals.hospitals} {analytics.totals.hospitals === 1 ? 'hospital' : 'hospitals'}</span></div>
           <div className="analytics-grid">
-            <div className="card"><div className="card-header"><h3>Payment status</h3></div><div className="card-body">
-              <Donut centerLabel="payments" data={analytics.paymentStatus.map(s => ({ label: s.status, value: s.count, color: STATUS_COLOR[s.status] || '#94a3b8' }))} />
-            </div></div>
             <div className="card"><div className="card-header"><h3>Services by revenue</h3></div><div className="card-body">
               <MetricBars data={analytics.servicesByType} valueKey="revenue" labelKey="name" />
             </div></div>
-            <div className="card analytics-wide"><div className="card-header"><h3>Monthly revenue</h3></div><div className="card-body">
+            <div className="card"><div className="card-header"><h3>Monthly revenue</h3></div><div className="card-body">
               {analytics.monthlyTrend.length > 0
                 ? <LineChart valueKey="revenue" points={analytics.monthlyTrend.map(m => ({ label: monthLabel(m.month), revenue: m.revenue }))} />
                 : <ChartEmpty />}
