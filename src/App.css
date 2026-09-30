@@ -1444,6 +1444,31 @@ button { cursor: pointer; border: none; background: none; }
   font-weight: 600;
 }
 
+/* ── Keyboard focus & reduced motion ── */
+
+.btn:focus-visible, .btn-ghost:focus-visible, .nav-item:focus-visible, .filter-chip:focus-visible,
+.card-link:focus-visible, .link-btn:focus-visible, .login-back:focus-visible, .login-switch button:focus-visible,
+.password-toggle:focus-visible, .tab:focus-visible, .welcome-btn:focus-visible, .welcome-link:focus-visible,
+.cf-pill:focus-visible, .hospital-delete:focus-visible, .data-table tr[style*="cursor"]:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.form-input:focus-visible, .form-select:focus-visible, .modal textarea:focus-visible {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+}
+.form-input.dark:focus-visible { box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.35); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* ── Animations ── */
 
 @keyframes fadeIn {
