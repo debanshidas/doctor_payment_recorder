@@ -87,8 +87,7 @@ function Field({ id, label, icon: Icon, type = 'text', value, onChange, autoComp
 
 // Bento-style stat grid for the dashboard hero.
 const DashBento = ({ d }) => {
-  const bars = (d.hospitalSummary || []).filter(h => h.earned > 0).map(h => h.received)
-  const bmax = Math.max(1, ...bars)
+  const receivedPct = d.earned > 0 ? Math.min(100, (d.received / d.earned) * 100) : 0
   return (
     <div className="bento">
       <div className="bento-primary">
@@ -103,7 +102,9 @@ const DashBento = ({ d }) => {
           <p className="bento-label">Received</p>
           <p className="bento-stat text-green">{formatMoney(d.received)}</p>
         </div>
-        {bars.length > 0 && <div className="bento-spark" aria-hidden="true">{bars.slice(0, 12).map((b, i) => <span key={i} style={{ height: `${Math.max(10, (b / bmax) * 100)}%` }} />)}</div>}
+        <div className="bento-ring" style={{ '--pct': `${receivedPct}%` }}>
+          <span>{Math.round(receivedPct)}%</span>
+        </div>
       </div>
       <div className="bento-b">
         <p className="bento-stat amber">{formatMoney(d.underReview)}</p>
