@@ -105,7 +105,8 @@ const SCHEMA = [
 
 async function createRemoteDb(url, authToken) {
     const { createClient } = await import('@libsql/client/web');
-    const client = createClient({ url, authToken });
+    // libsql:// selects a WebSocket transport that can stall on some hosts; plain HTTPS is reliable.
+    const client = createClient({ url: url.replace(/^libsql:\/\//, 'https://'), authToken });
     const toObjects = (rs) => rs.rows.map(r => Object.fromEntries(rs.columns.map((c, i) => [c, r[i]])));
     return {
         label: `Turso (${url})`,
@@ -135,9 +136,26 @@ async function createLocalDb(file) {
     };
 }
 
-const db = process.env.TURSO_DATABASE_URL
-    ? await createRemoteDb(process.env.TURSO_DATABASE_URL, process.env.TURSO_AUTH_TOKEN)
-    : await createLocalDb(process.env.DB_PATH || path.resolve(__dirname, 'database.sqlite'));
+async function connect() {
+    const localPath = process.env.DB_PATH || path.resolve(__dirname, 'database.sqlite');
+    const { TURSO_DATABASE_URL: url, TURSO_AUTH_TOKEN: token } = process.env;
+    if (!url) return createLocalDb(localPath);
+    try {
+        const remote = await createRemoteDb(url, token);
+        await Promise.race([
+            remote.exec('SELECT 1'),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('connection timed out after 15s')), 15000)),
+        ]);
+        return remote;
+    } catch (err) {
+        console.error('Turso connection failed, falling back to local file:', err.message);
+        const local = await createLocalDb(localPath);
+        local.error = `Turso: ${err.message}`;
+        return local;
+    }
+}
+
+const db = await connect();
 
 for (const stmt of SCHEMA) await db.exec(stmt);
 
