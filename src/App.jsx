@@ -508,13 +508,21 @@ function App() {
 
   // ── Payouts ──
 
-  // Net expected this month for a hospital — used to pre-fill Total Payable on a partial payment.
-  const monthEarnedForHospital = (hid) => {
+  // Pre-fill Total Payable from the hospital's net expected for the payment's month,
+  // falling back to its all-time expected dues so the field is never blank when data exists.
+  const monthEarnedForHospital = (hid, dateStr) => {
     if (!hid) return 0
-    const now = new Date()
+    const ref = dateStr ? new Date(`${dateStr}T00:00:00`) : new Date()
     return procedures
-      .filter(p => p.hospital_id === Number(hid) && (() => { const d = new Date(`${p.date}T00:00:00`); return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() })())
+      .filter(p => p.hospital_id === Number(hid) && (() => { const d = new Date(`${p.date}T00:00:00`); return d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth() })())
       .reduce((s, p) => s + p.net_expected, 0)
+  }
+  const prefillTotal = (hid, dateStr) => {
+    if (!hid) return ''
+    const month = monthEarnedForHospital(hid, dateStr)
+    if (month > 0) return String(month)
+    const all = procedures.filter(p => p.hospital_id === Number(hid)).reduce((s, p) => s + p.net_expected, 0)
+    return all > 0 ? String(all) : ''
   }
 
   const savePayout = async (e) => {
@@ -1246,20 +1254,20 @@ function App() {
                 <div className="form-grid">
                   <div className="form-field full">
                     <label className="form-label" htmlFor="p-hosp">Hospital</label>
-                    <select id="p-hosp" className="form-select" autoFocus={!editingPayout} disabled={!!editingPayout} value={payoutForm.hospital_id} onChange={e => { const hid = e.target.value; setPayoutForm(f => ({ ...f, hospital_id: hid, expected_net: f.status === 'Partially Paid' ? String(monthEarnedForHospital(hid) || '') : f.expected_net })) }}>
+                    <select id="p-hosp" className="form-select" autoFocus={!editingPayout} disabled={!!editingPayout} value={payoutForm.hospital_id} onChange={e => { const hid = e.target.value; setPayoutForm(f => ({ ...f, hospital_id: hid, expected_net: f.status === 'Partially Paid' ? prefillTotal(hid, f.date) : f.expected_net })) }}>
                       <option value="">Select hospital…</option>
                       {hospitals.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
                     </select>
                   </div>
                   <div className="form-field"><label className="form-label" htmlFor="p-amt">Amount Received (₹)</label><input id="p-amt" className="form-input" type="number" min="0" inputMode="numeric" value={payoutForm.actual_net} onChange={e => setPayoutForm({ ...payoutForm, actual_net: e.target.value })} /></div>
-                  <div className="form-field"><label className="form-label" htmlFor="p-date">Payment Date</label><input id="p-date" className="form-input" type="date" value={payoutForm.date} onChange={e => setPayoutForm({ ...payoutForm, date: e.target.value })} /></div>
+                  <div className="form-field"><label className="form-label" htmlFor="p-date">Payment Date</label><input id="p-date" className="form-input" type="date" value={payoutForm.date} onChange={e => { const date = e.target.value; setPayoutForm(f => ({ ...f, date, expected_net: f.status === 'Partially Paid' ? prefillTotal(f.hospital_id, date) : f.expected_net })) }} /></div>
                   <div className="form-field full"><label className="form-label" htmlFor="p-ref">Reference</label><input id="p-ref" className="form-input" value={payoutForm.transaction_ref} onChange={e => setPayoutForm({ ...payoutForm, transaction_ref: e.target.value })} placeholder="UTR / NEFT / Cheque No." /></div>
                   <div className="form-field full">
                     <span className="form-label">Status</span>
                     <div className="basis-toggle three" role="radiogroup" aria-label="Payment status">
                       {PAYOUT_STATUS_OPTIONS.map(o => (
                         <button key={o.value} type="button" role="radio" aria-checked={payoutForm.status === o.value} className={payoutForm.status === o.value ? 'active' : ''}
-                          onClick={() => setPayoutForm(f => ({ ...f, status: o.value, expected_net: o.value === 'Partially Paid' ? (f.expected_net || String(monthEarnedForHospital(f.hospital_id) || '')) : f.expected_net }))}>
+                          onClick={() => setPayoutForm(f => ({ ...f, status: o.value, expected_net: o.value === 'Partially Paid' ? (f.expected_net || prefillTotal(f.hospital_id, f.date)) : f.expected_net }))}>
                           {o.label}<small>{o.hint}</small>
                         </button>
                       ))}
@@ -1269,7 +1277,7 @@ function App() {
                     <div className="form-field full">
                       <label className="form-label" htmlFor="p-total">Total Payable (₹)</label>
                       <input id="p-total" className="form-input" type="number" min="0" inputMode="numeric" value={payoutForm.expected_net} onChange={e => setPayoutForm({ ...payoutForm, expected_net: e.target.value })} placeholder="e.g. 50000" />
-                      <span className="form-hint">Pre-filled with this hospital's net expected for {new Date().toLocaleDateString('en-IN', { month: 'long' })} — edit if the total differs.</span>
+                      <span className="form-hint">Pre-filled from this hospital's expected dues — edit if the total differs.</span>
                     </div>
                   )}
                 </div>
