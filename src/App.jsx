@@ -85,14 +85,40 @@ function Field({ id, label, icon: Icon, type = 'text', value, onChange, autoComp
   )
 }
 
-const MoneyTiles = ({ m, subs = {} }) => (
-  <div className="stat-strip">
-    <div><span className="stat-label">Earned</span><span className="stat-value">{formatMoney(m.earned)}</span><span className="stat-sub">{subs.earned || 'Net expected from entries'}</span></div>
-    <div><span className="stat-label">Received</span><span className="stat-value green">{formatMoney(m.received)}</span><span className="stat-sub">{subs.received || 'Fully or partially paid'}</span></div>
-    <div><span className="stat-label">Under Review</span><span className="stat-value amber">{formatMoney(m.underReview)}</span><span className="stat-sub">{subs.underReview || 'Awaiting verification'}</span></div>
-    <div><span className="stat-label">Pending</span><span className="stat-value">{formatMoney(m.pending)}</span><span className="stat-sub">{subs.pending || 'Not yet paid'}</span></div>
-  </div>
-)
+// Bento-style stat grid for the dashboard hero.
+const DashBento = ({ d }) => {
+  const bars = (d.hospitalSummary || []).filter(h => h.earned > 0).map(h => h.received)
+  const bmax = Math.max(1, ...bars)
+  return (
+    <div className="bento">
+      <div className="bento-primary">
+        <div>
+          <span className="bento-kicker">Earned</span>
+          <div className="bento-num">{formatMoney(d.earned)}</div>
+        </div>
+        <p className="bento-caption">Net expected across {d.procedureCount} {d.procedureCount === 1 ? 'entry' : 'entries'} · {formatPct(d.collectionRate)} collected</p>
+      </div>
+      <div className="bento-a">
+        <div>
+          <p className="bento-label">Received</p>
+          <p className="bento-stat text-green">{formatMoney(d.received)}</p>
+        </div>
+        {bars.length > 0 && <div className="bento-spark" aria-hidden="true">{bars.slice(0, 12).map((b, i) => <span key={i} style={{ height: `${Math.max(10, (b / bmax) * 100)}%` }} />)}</div>}
+      </div>
+      <div className="bento-b">
+        <p className="bento-stat amber">{formatMoney(d.underReview)}</p>
+        <p className="bento-label">Under Review</p>
+      </div>
+      <div className="bento-c">
+        <div className="bento-c-icon"><IndianRupee size={20} /></div>
+        <div>
+          <p className="bento-stat">{formatMoney(d.pending)}</p>
+          <p className="bento-label">Pending settlement</p>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 async function api(path, opts = {}) {
   const session = JSON.parse(localStorage.getItem('doctrack_session') || '{}')
@@ -485,8 +511,6 @@ function App() {
       )
     }
 
-    const paidCount = payouts.filter(p => p.status === 'Paid').length
-    const reviewCount = payouts.filter(p => p.status === 'Under Review').length
     return (
       <div className="animate-in">
         <div className="page-header">
@@ -497,12 +521,7 @@ function App() {
           <button className="btn btn-primary" onClick={openEntry}><Plus size={16} /> Add Entry</button>
         </div>
 
-        <MoneyTiles m={d} subs={{
-          earned: `${d.procedureCount} ${d.procedureCount === 1 ? 'entry' : 'entries'}`,
-          received: `${paidCount} payment${paidCount === 1 ? '' : 's'}`,
-          underReview: `${reviewCount} payment${reviewCount === 1 ? '' : 's'}`,
-          pending: `${formatPct(d.collectionRate)} collected`,
-        }} />
+        <DashBento d={d} />
 
         {d.alerts.length > 0 && (
           <div className="card mb-6"><div className="card-header"><h3>Alerts</h3></div><div className="card-body">
