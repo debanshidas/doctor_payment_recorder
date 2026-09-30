@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Eye, EyeOff, LayoutDashboard, Building2, FileText, IndianRupee, AlertTriangle, LogOut, Menu, X, Plus, User, ChevronDown, ChevronRight, Receipt, CheckCircle2, ArrowLeft, ArrowRight, Trash2, Pencil, Mail, AtSign, Lock } from 'lucide-react'
 import Welcome from './Welcome.jsx'
 import ShinyButton from './ShinyButton.jsx'
+import InteractiveHoverButton from './InteractiveHoverButton.jsx'
 import MeshGradient from './MeshGradient.jsx'
 import { SettlementBars, MetricBars, Donut, LineChart, ChartEmpty, STATUS_COLOR } from './Charts.jsx'
 import './App.css'
@@ -1095,7 +1096,7 @@ function App() {
                 <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} /> Remember me
               </label>
               {loginError && <div className="login-error" role="alert">{loginError}</div>}
-              <ShinyButton type="submit" className="block">Login</ShinyButton>
+              <InteractiveHoverButton type="submit" className="block" text="Login" />
             </form>
             <div className="login-switch"><button onClick={() => { setAuthView('signup'); setSignupError('') }}>Don't have an account? Create one</button></div>
           </>)}
@@ -1113,7 +1114,7 @@ function App() {
               <Field id="su-pw" label="Password" icon={Lock} type="password" value={signupForm.password || ''} onChange={e => setSignupForm({ ...signupForm, password: e.target.value })} autoComplete="new-password" />
               <Field id="su-pw2" label="Confirm Password" icon={Lock} type="password" value={signupForm.confirmPassword || ''} onChange={e => setSignupForm({ ...signupForm, confirmPassword: e.target.value })} autoComplete="new-password" />
               {signupError && <div className="login-error" role="alert">{signupError}</div>}
-              <ShinyButton type="submit" className="block">Create Account</ShinyButton>
+              <InteractiveHoverButton type="submit" className="block" text="Create Account" />
             </form>
             <div className="login-switch"><button onClick={() => { setAuthView('login'); setLoginError('') }}>Already have an account? Log in</button></div>
           </>)}

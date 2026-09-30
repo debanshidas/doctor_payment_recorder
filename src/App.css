@@ -1003,6 +1003,63 @@ button { cursor: pointer; border: none; background: none; }
   box-shadow: 0 30px 70px rgba(2,6,23,0.55);
 }
 
+/* ── Interactive hover button (ported from shadcn) ── */
+
+.ihb {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.06);
+  color: #f8fafc;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 1rem;
+  padding: 13px;
+  text-align: center;
+  min-height: 46px;
+}
+.ihb.block { width: 100%; }
+.ihb-text {
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  transform: translateX(4px);
+  transition: transform 0.3s, opacity 0.3s;
+}
+.ihb:hover .ihb-text { transform: translateX(48px); opacity: 0; }
+.ihb-hover {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #ffffff;
+  opacity: 0;
+  transform: translateX(48px);
+  transition: transform 0.3s, opacity 0.3s;
+}
+.ihb:hover .ihb-hover { transform: translateX(-4px); opacity: 1; }
+.ihb-dot {
+  position: absolute;
+  left: 20%;
+  top: 40%;
+  height: 8px;
+  width: 8px;
+  border-radius: 8px;
+  background: var(--blue);
+  transition: all 0.3s;
+}
+.ihb:hover .ihb-dot { left: 0; top: 0; height: 100%; width: 100%; border-radius: 999px; transform: scale(1.8); }
+.ihb:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+.ihb:active { transform: translateY(1px); }
+@media (prefers-reduced-motion: reduce) {
+  .ihb-text, .ihb-hover, .ihb-dot { transition: none; }
+}
+
 /* ── Floating-label glass fields ── */
 
 .ff { position: relative; }
