@@ -962,6 +962,9 @@ button { cursor: pointer; border: none; background: none; }
 /* ── Auth / Login ── */
 
 .login-shell {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -969,6 +972,25 @@ button { cursor: pointer; border: none; background: none; }
   padding: 24px;
   background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
 }
+.login-mesh {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  user-select: none;
+  overflow: hidden;
+}
+.login-mesh canvas { display: block; }
+.login-mesh-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(15, 23, 42, 0.35) 0%, rgba(15, 23, 42, 0.7) 55%, rgba(15, 23, 42, 0.92) 100%),
+    linear-gradient(to bottom, rgba(15, 23, 42, 0.4), rgba(15, 23, 42, 0.75));
+}
+.login-shell .login-card { position: relative; z-index: 1; }
 
 .login-card {
   width: min(440px, 100%);

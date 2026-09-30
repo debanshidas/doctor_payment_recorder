@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Eye, EyeOff, LayoutDashboard, Building2, FileText, IndianRupee, AlertTriangle, LogOut, Menu, X, Plus, User, ChevronDown, ChevronRight, Receipt, CheckCircle2, ArrowLeft, ArrowRight, Trash2, Pencil } from 'lucide-react'
 import Welcome from './Welcome.jsx'
 import ShinyButton from './ShinyButton.jsx'
+import MeshGradient from './MeshGradient.jsx'
 import { SettlementBars, MetricBars, Donut, LineChart, ChartEmpty, STATUS_COLOR } from './Charts.jsx'
 import './App.css'
 
@@ -1066,6 +1067,8 @@ function App() {
   if (!session.loggedIn) {
     return (
       <div className="login-shell">
+        <MeshGradient className="login-mesh" />
+        <div className="login-mesh-overlay" aria-hidden="true" />
         <div className="login-card">
           <button className="login-back" onClick={() => setShowAuth(false)}><ArrowLeft size={14} /> Back to home</button>
           {authView === 'login' && (<>
