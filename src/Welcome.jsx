@@ -24,8 +24,7 @@ export default function Welcome({ onLogin, onSignup }) {
         <div className="welcome-mesh-overlay" aria-hidden="true" />
         <header className="welcome-nav">
           <div className="welcome-brand">
-            <img src="doctrack-logo.png" alt="" />
-            <span>DocTrack</span>
+            <span className="wordmark">Doc<span>Track</span><i /></span>
           </div>
           <nav>
             <button className="welcome-link" onClick={onLogin}>Log in</button>

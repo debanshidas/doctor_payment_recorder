@@ -923,8 +923,7 @@ function App() {
           <button className="login-back" onClick={() => setShowAuth(false)}><ArrowLeft size={14} /> Back to home</button>
           {authView === 'login' && (<>
             <div className="login-header">
-              <img src="doctrack-logo.png" alt="DocTrack" className="login-logo" style={{ objectFit: 'contain' }} />
-              <h1>DocTrack</h1>
+              <h1><span className="wordmark large">Doc<span>Track</span><i /></span></h1>
               <p>Revenue Reconciliation Platform</p>
             </div>
             <form className="login-form" onSubmit={handleLogin}>
@@ -950,7 +949,7 @@ function App() {
 
           {authView === 'signup' && (<>
             <div className="login-header">
-              <img src="doctrack-logo.png" alt="DocTrack" className="login-logo" style={{ objectFit: 'contain' }} />
+              <span className="wordmark" style={{ display: 'inline-flex', marginBottom: 12 }}>Doc<span>Track</span><i /></span>
               <h1>Create Account</h1>
               <p>Set up your revenue tracking</p>
             </div>
@@ -1002,8 +1001,7 @@ function App() {
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
           <div className="brand-inner">
-            <img src="doctrack-logo.png" alt="" className="sidebar-logo" style={{ objectFit: 'contain' }} />
-            <div className="brand-text"><span className="brand-name">DocTrack</span><span className="brand-tagline">Revenue Reconciliation</span></div>
+            <div className="brand-text"><span className="wordmark">Doc<span>Track</span><i /></span><span className="brand-tagline">Revenue Reconciliation</span></div>
           </div>
         </div>
 
