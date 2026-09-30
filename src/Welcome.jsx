@@ -1,13 +1,10 @@
-import { Activity, ArrowRight, Building2, FileText, IndianRupee, ShieldCheck, Zap } from 'lucide-react'
+import { ArrowRight, Building2, IndianRupee, ShieldCheck } from 'lucide-react'
 import CinematicFooter from './CinematicFooter.jsx'
 import './welcome.css'
 
 const FEATURES = [
-  { icon: FileText, title: 'Services priced per hospital', text: 'Consultation at ₹1,000 here, ₹1,500 there; surgery types with their own rates. Set it once, never type it again.' },
   { icon: Building2, title: 'Share or fixed-fee rules', text: 'Model each hospital the way it actually pays you: a percentage of gross billing, or a fixed amount per case.' },
   { icon: IndianRupee, title: 'TDS and deductions, automatically', text: 'Every entry shows gross, your share, TDS, deductions and the exact net you should expect to receive.' },
-  { icon: Zap, title: 'Three-click daily entries', text: 'Hospital, service, save. Amounts fill in from your configured prices and the form remembers your last hospital.' },
-  { icon: Activity, title: 'Earned vs received', text: 'Earned, received, under review and pending — per hospital, always calculated from real entries and payments.' },
   { icon: ShieldCheck, title: 'Verified payments', text: 'Record a payment in seconds; it stays under review until verified so your numbers are never inflated.' },
 ]
 
@@ -49,17 +46,51 @@ export default function Welcome({ onLogin, onSignup }) {
           </div>
         </section>
 
-        <section className="welcome-section">
-          <h2>Everything between the OT and your bank account</h2>
-          <div className="welcome-features">
-            {FEATURES.map(f => (
-              <div key={f.title} className="welcome-feature">
-                <div className="welcome-feature-icon"><f.icon size={20} /></div>
-                <h3>{f.title}</h3>
-                <p>{f.text}</p>
-              </div>
-            ))}
+        <section className="welcome-section feature-cards">
+          <div className="feature-cards-intro">
+            <h2>Powerful, simple features</h2>
+            <p>Everything between the OT and your bank account — priced once, logged in three clicks, reconciled automatically.</p>
           </div>
+          <div className="feature-cards-row">
+            <article className="feature-card">
+              <div className="feature-art art-entry" aria-hidden="true">
+                <div className="art-row"><span>Hospital</span><b>Kauvery Hospital</b></div>
+                <div className="art-row"><span>Service</span><b>Consultation</b></div>
+                <div className="art-row"><span>Amount</span><b className="art-green">₹1,000</b></div>
+                <div className="art-btn">Save Entry</div>
+              </div>
+              <h3>Three-click daily entries</h3>
+              <p>Pick the hospital and service; the amount fills itself from your prices. Save, or save and add another.</p>
+            </article>
+            <article className="feature-card">
+              <div className="feature-art art-services" aria-hidden="true">
+                <div className="art-title">Kauvery Hospital · Services</div>
+                <div className="art-chips">
+                  <span>Consultation <em>₹1,000</em></span>
+                  <span>Follow-up <em>₹500</em></span>
+                  <span>Surgery <em>3 types</em></span>
+                  <span className="art-chip-add">+ Add Service</span>
+                </div>
+              </div>
+              <h3>Services priced per hospital</h3>
+              <p>Consultation, follow-up, surgery types with their own rates — configured once on the hospital card.</p>
+            </article>
+            <article className="feature-card">
+              <div className="feature-art art-money" aria-hidden="true">
+                <div className="art-bar"><span>Earned</span><i style={{ width: '100%' }} /><b>₹1.2L</b></div>
+                <div className="art-bar"><span>Received</span><i className="g" style={{ width: '62%' }} /><b>₹74k</b></div>
+                <div className="art-bar"><span>Review</span><i className="a" style={{ width: '18%' }} /><b>₹22k</b></div>
+                <div className="art-bar"><span>Pending</span><i className="r" style={{ width: '20%' }} /><b>₹24k</b></div>
+              </div>
+              <h3>Earned vs received</h3>
+              <p>Earned, received, under review and pending — per hospital, always computed from real entries and payments.</p>
+            </article>
+          </div>
+          <ul className="feature-points">
+            {FEATURES.map(f => (
+              <li key={f.title}><f.icon size={16} /><span><strong>{f.title}.</strong> {f.text}</span></li>
+            ))}
+          </ul>
         </section>
 
         <section className="welcome-section">
