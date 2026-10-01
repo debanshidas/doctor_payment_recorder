@@ -219,9 +219,14 @@ await db.run(
     `INSERT OR IGNORE INTO users (username, email, name, password_hash, role, status) VALUES ('admin', 'admin@doctrack.com', 'System Admin', ?, 'admin', 'active')`,
     [adminHash]
 );
-// Keep the admin password in sync with ADMIN_PASSWORD (or admin123) on every start,
-// so it can always be reset from the deploy environment. Also ensure the admin stays active.
-await db.run(`UPDATE users SET password_hash = ?, status = 'active' WHERE username = 'admin' AND role = 'admin'`, [adminHash]);
+// The admin password is seeded once above and then owned by the app, so a password
+// changed in Settings survives restarts (this host restarts on every wake from idle).
+// Recovery path: set ADMIN_PASSWORD_RESET=true to force it back to ADMIN_PASSWORD on
+// the next start, then remove the flag.
+if (String(process.env.ADMIN_PASSWORD_RESET).toLowerCase() === 'true') {
+    await db.run(`UPDATE users SET password_hash = ?, status = 'active' WHERE username = 'admin' AND role = 'admin'`, [adminHash]);
+    console.log('ADMIN_PASSWORD_RESET was set — admin password reset from the environment.');
+}
 
 console.log('Connected to database:', db.label);
 
