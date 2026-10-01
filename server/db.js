@@ -219,6 +219,9 @@ await db.run(
     `INSERT OR IGNORE INTO users (username, email, name, password_hash, role, status) VALUES ('admin', 'admin@doctrack.com', 'System Admin', ?, 'admin', 'active')`,
     [adminHash]
 );
+// Keep the admin password in sync with ADMIN_PASSWORD (or admin123) on every start,
+// so it can always be reset from the deploy environment. Also ensure the admin stays active.
+await db.run(`UPDATE users SET password_hash = ?, status = 'active' WHERE username = 'admin' AND role = 'admin'`, [adminHash]);
 
 console.log('Connected to database:', db.label);
 
